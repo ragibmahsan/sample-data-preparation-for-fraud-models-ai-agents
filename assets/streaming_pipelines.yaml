@@ -1,0 +1,1825 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Mappings:
+  NetworkMap:
+    VPC:
+      CIDR: 10.0.0.0/16
+    PublicSubnetOne:
+      CIDR: 10.0.0.0/24
+    PrivateSubnetMSKOne:
+      CIDR: 10.0.1.0/24
+    PrivateSubnetMSKTwo:
+      CIDR: 10.0.2.0/24
+    PrivateSubnetMSKThree:
+      CIDR: 10.0.3.0/24
+
+  ModelContainerMap:
+    us-east-1:
+      ModelImage: '811284229777.dkr.ecr.us-east-1.amazonaws.com/xgboost:latest'
+    us-east-2:
+      ModelImage: '825641698319.dkr.ecr.us-east-2.amazonaws.com/xgboost:latest'
+    us-west-2:
+      ModelImage: '632365934929.dkr.ecr.us-west-1.amazonaws.com/xgboost:latest'
+    ap-southeast-2:
+      ModelImage: '544295431143.dkr.ecr.ap-southeast-2.amazonaws.com/xgboost:latest'
+
+Parameters:
+  # WORKSHOP STUDIO /PARAMS
+  MyAssetsBucketName:
+    Description: Assets bucket name
+    Type: String
+
+  MyAssetsBucketPrefix:
+    Description: Assets bucket name
+    Type: String
+
+  # MSK /PARAMS
+  KafkaVersion:
+    Type: String
+    Default: 3.5.1
+  MskIamAuthVersion:
+    Type: String
+    Default: 2.2.0
+  NumberBrokerNodes:
+    Type: Number
+    Default: 3
+  BrokerInstanceType:
+    Type: String
+    Default: kafka.m5.large
+  MonitoringLevel:
+    Type: String
+    Default: DEFAULT
+    AllowedValues:
+      - DEFAULT
+      - PER_BROKER
+      - PER_TOPIC_PER_BROKER
+      - PER_TOPIC_PER_PARTITION
+  EbsVolumeSize:
+    Type: Number
+    Default: 1000
+  DemoTransactionsTopic:
+    Type: String
+    Default: demo_transactions
+  FlaggedTransactionsTopic:
+    Type: String
+    Default: flagged_transactions
+  ProcessedTransactionsTopic:
+    Type: String
+    Default: processed_transactions
+
+  # EC2CLIENT /PARAMS
+  ClientInstanceType:
+    Type: String
+    Default: m5.large
+    AllowedValues:
+      - m5.large
+      - t2.micro
+      - t3.small
+  ClientAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+
+  # LAMBDA FUNCTIONS /PARAMS
+  TransactionGeneratorProducerZip:
+    Description: Tranasaction Generator Source
+    Type: String
+    Default: TransactionGeneratorProducer.zip
+  TransactionGeneratorProducerLayerZip:
+    Description: Tranasaction Generator Producer Layer Libraries
+    Type: String
+    Default: TransactionGeneratorProducerLayer.zip
+  TransactionGeneratorFile:
+    Description: Tranasaction Generator Data File
+    Type: String
+    Default: demo_transactions_100k.csv
+  FraudFlagTransactionProducerZip:
+    Description: Fraud Flag Transaction Producer Source
+    Type: String
+    Default: FraudFlagTransactionProducer.zip
+  FraudFlagTransactionProducerLayerZip:
+    Description: Tranasaction Generator Producer Layer Libraries
+    Type: String
+    Default: FraudFlagTransactionProducerLayer.zip
+
+  FraudScoringConsumerZip:
+    Description: Fraud Scoring Transaction Consumer Source
+    Type: String
+    Default: FraudScoringConsumer.zip
+
+  # DATA /PARAMS
+  CityData:
+    Description: City data
+    Type: String
+    Default: city.csv
+  StateData:
+    Description: State data
+    Type: String
+    Default: state.csv
+  UserAgentData:
+    Description: User Agent Data
+    Type: String
+    Default: user_agent.csv
+  ProductCategoryData:
+    Description: Product Category Data
+    Type: String
+    Default: product_category.csv
+  PaymentCurrencyData:
+    Description: Payment Currency Data
+    Type: String
+    Default: payment_currency.csv
+  MerchantData:
+    Description: Merchant Data
+    Type: String
+    Default: merchant.csv
+
+  # MODEL CONFIGURATION /PARAMS
+  ModelData:
+    Description:  Model data
+    Type: String
+    Default: model.tar.gz
+  ModelInstanceType:
+    Description:  Model Instance Type
+    Type: String
+    Default: ml.m5.large
+
+  # SAGEMAKER /PARAMS
+  NetworkAccessType:
+    Type: String
+    AllowedValues:
+      - 'PublicInternetOnly'
+      - 'VpcOnly'
+    Description: Choose how SageMaker Studio accesses resources over the Network
+    Default: 'PublicInternetOnly'
+  AuthMode:
+    Type: String
+    AllowedValues:
+      - 'IAM'
+      - 'SSO'
+    Description: The mode of authentication that members use to access the domain
+    Default: 'IAM'
+  DomainName:
+    Type: String
+    Default: wstudio-domain
+  UserProfileName:
+    Type: String
+    Default: sagemaker-user
+  ProjectName:
+    Type: String
+    Default: fraud-prevention-sagemaker-studio-vpc
+  JupyterLabInstanceType:
+    Description:  Model Instance Type
+    Type: String
+    Default: ml.t3.medium
+  DemoData:
+    Description: demo transactions
+    Type: String
+    Default: demo_transactions_100k.csv
+  TransactionFlow:
+    Description: Canvas flow file
+    Type: String
+    Default: transactions.flow
+
+
+Resources:
+  # IAM /RESOURCES
+  MskAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Access policy for MSK Cluster & Topics
+      ManagedPolicyName: !Join
+        - '-'
+        - - MskAccessPolicy
+          - !Ref 'AWS::StackName'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ClusterMetadata
+            Effect: Allow
+            Action: 
+              - kafka:DescribeClusterV2
+              - kafka:GetBootstrapBrokers
+            Resource: '*'
+          - Sid: KafkaClusterAPI
+            Effect: Allow
+            Action: 
+                - kafka-cluster:Connect
+                - kafka-cluster:DescribeCluster
+                - kafka-cluster:AlterCluster
+                - kafka-cluster:DescribeGroup
+                - kafka-cluster:AlterGroup
+                - kafka-cluster:DeleteGroup
+                - kafka-cluster:CreateTopic
+                - kafka-cluster:DescribeTopic
+                - kafka-cluster:AlterTopic
+                - kafka-cluster:DeleteTopic
+                - kafka-cluster:WriteData
+                - kafka-cluster:WriteDataIdempotently
+                - kafka-cluster:ReadData
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:kafka:${AWS::Region}:${AWS::AccountId}:cluster/kafka-cluster-${AWS::StackName}/*'
+              - !Sub 'arn:${AWS::Partition}:kafka:${AWS::Region}:${AWS::AccountId}:topic/kafka-cluster-${AWS::StackName}/*/*'
+              - !Sub 'arn:${AWS::Partition}:kafka:${AWS::Region}:${AWS::AccountId}:group/kafka-cluster-${AWS::StackName}/*/*'
+
+  S3AccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties: 
+      Description: S3 access for workshop components. Currently any bucket.
+      ManagedPolicyName: !Join
+        - '-'
+        - - S3AccessPolicy
+          - !Ref 'AWS::StackName'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: 
+              - s3:CopyObject
+              - s3:PutObject
+              - s3:GetObject
+              - s3:DeleteObject
+              - s3:List*
+              - kms:Decrypt
+              - kms:Encrypt
+              - kms:GenerateDataKey
+              - kms:ReEncryptTo
+              - kms:ReEncryptFrom
+            Resource: '*'
+
+  EC2MonitoringPolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      Description: Monitoring policy for EC2 Instances
+      ManagedPolicyName: !Join
+        - '-'
+        - - EC2MonitoringPolicy
+          - !Ref 'AWS::StackName'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: 'cloudwatch:PutMetricData'
+            Resource: '*'
+
+  LambdaLoggingPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Logging policy for Lambda functions
+      ManagedPolicyName: !Join
+        - '-'
+        - - LambdaLoggingPolicy
+          - !Ref 'AWS::StackName'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: "Allow"
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:DeleteLogGroup
+              - logs:DeleteLogStream
+              - logs:PutLogEvents
+            Resource: "*"
+  
+  LambdaVPCAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: VPC access policy for Lambda functions that use workshop VPC
+      ManagedPolicyName: !Join
+        - '-'
+        - - LambdaVPCAccessPolicy
+          - !Ref 'AWS::StackName'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: "Allow"
+            Action:
+              - ec2:DescribeNetworkInterfaces
+              - ec2:CreateNetworkInterface
+              - ec2:DeleteNetworkInterface
+              - ec2:DescribeInstances
+              - ec2:AttachNetworkInterface
+              - ec2:DescribeSecurityGroups
+              - ec2:DescribeSubnets
+              - ec2:DescribeVpcs
+            Resource: "*"
+
+  MSFLoggingPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Logging policy for MSF
+      ManagedPolicyName: !Join
+        - '-'
+        - - MSFLoggingPolicy
+          - !Ref 'AWS::StackName'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: "Allow"
+            Action:
+              - logs:DescribeLogGroups
+            Resource: 
+              - '*'
+          - Effect: Allow
+            Action:
+              - logs:DescribeLogStreams
+              - logs:PutLogEvents
+            Resource: 
+              - !GetAtt MSFLogGroup.Arn
+
+  MSFVPCPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: EC2 Networking policy for MAF
+      ManagedPolicyName: !Join
+        - '-'
+        - - MSFVPCPolicy
+          - !Ref 'AWS::StackName'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: "Allow"
+            Action:
+              - ec2:CreateNetworkInterface
+              - ec2:DescribeNetworkInterfaces
+              - ec2:DescribeVpcs
+              - ec2:DeleteNetworkInterface
+              - ec2:DescribeDhcpOptions
+              - ec2:DescribeSubnets
+              - ec2:DescribeSecurityGroups
+            Resource: 
+              - '*'
+          - Effect: Allow
+            Action:
+              - ec2:CreateNetworkInterfacePermission
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*'
+
+  MSFGlueDatabasePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Glue database access policy for MAF
+      ManagedPolicyName: !Join
+        - '-'
+        - - MSFGlueDatabasePolicy
+          - !Ref 'AWS::StackName'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: "Allow"
+            Action:
+              - glue:GetConnection
+              - glue:GetTable
+              - glue:GetTables
+              - glue:CreateTable
+              - glue:UpdateTable
+              - glue:GetDatabases
+              - glue:GetUserDefinedFunction
+              - glue:GetPartitions
+              - glue:DeleteTable
+            Resource: 
+              - !Sub 'arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:connection/*'
+              - !Join 
+                - ''
+                - - !Sub 'arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:table/'
+                  - !Ref MSFGlueDatabase
+                  - '/*'
+              - !Join 
+                - ''
+                - - !Sub 'arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:database/'
+                  - !Ref MSFGlueDatabase
+              - !Sub 'arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:database/hive'
+              - !Sub 'arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:catalog'
+              - !Sub 'arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:userDefinedFunction/*'
+          - Effect: Allow
+            Action:
+              - glue:GetDatabase
+            Resource:
+              - '*'
+
+  # GENERATE RANDOM NUMBER /RESOURCE
+  LambdaRandomNumberGeneratorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Lambda random number generator role
+      RoleName: !Join
+        - '-'
+        - - LambdaRandomNumberGeneratorRole
+          - !Ref 'AWS::StackName'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - !Ref LambdaLoggingPolicy
+
+  LambdaGenerateRandomNumber:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: >
+          const response = require("cfn-response");
+
+          const generateNumber = (length, chars) => {
+            var result = '';
+            for (var i = length; i > 0; --i) result += chars[Math.floor(Math.random() * chars.length)];
+            return result;
+          };
+
+          exports.handler = (event, context) =>{
+            const str = generateNumber(event['ResourceProperties']['Length'], '0123456789');
+            const responseData = {RandomNumber: str};
+            response.send(event, context, response.SUCCESS, responseData);
+          };
+      Handler: index.handler
+      Runtime: nodejs18.x
+      Role: !GetAtt LambdaRandomNumberGeneratorRole.Arn
+      MemorySize: 128
+      Timeout: 20
+
+  GenerateRandomNumber:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      Length: 9
+      ServiceToken: !GetAtt LambdaGenerateRandomNumber.Arn
+
+  # S3 BUCKETS /RESOURCES
+  AccessLogsBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub 'accesslogsbucket-${AWS::StackName}-${AWS::Region}-${GenerateRandomNumber.RandomNumber}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerPreferred
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Retain
+
+  S3DataBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub 's3databucket-${AWS::StackName}-${AWS::Region}-${GenerateRandomNumber.RandomNumber}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+            Id: multipart-upload-rule
+            Status: Enabled
+          - Id: intelligent-tiering-rule
+            Status: Enabled
+            Transitions:
+              - StorageClass: INTELLIGENT_TIERING
+                TransitionInDays: 1
+      LoggingConfiguration:
+        DestinationBucketName: !Ref AccessLogsBucket
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Retain
+
+  S3DataBucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref S3DataBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action: '*'
+            Condition:
+              Bool:
+                'aws:SecureTransport': 'false'
+            Effect: Deny
+            Principal:
+              AWS: '*'
+            Resource:
+              - !Join 
+                - ''
+                - - !GetAtt 
+                    - S3DataBucket
+                    - Arn
+                  - /*
+              - !GetAtt 
+                - S3DataBucket
+                - Arn
+            Sid: HttpsOnly
+
+  # VPC /RESOURCES
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !FindInMap ['NetworkMap', 'VPC', 'CIDR']
+      EnableDnsSupport: True
+      EnableDnsHostnames: True
+      Tags:
+      - Key: Name
+        Value: MSKVPC
+
+  PublicSubnetOne:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone:
+        Fn::Select:
+        - 0
+        - Fn::GetAZs: {Ref: 'AWS::Region'}
+      CidrBlock: !FindInMap ['NetworkMap', 'PublicSubnetOne', 'CIDR']
+      MapPublicIpOnLaunch: True
+      Tags: 
+      - Key: 'Name'
+        Value: 'PublicSubnetOne'
+  
+  PrivateSubnetMSKOne:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone:
+        Fn::Select:
+        - 0
+        - Fn::GetAZs: {Ref: 'AWS::Region'}
+      CidrBlock: !FindInMap ['NetworkMap', 'PrivateSubnetMSKOne', 'CIDR']
+      MapPublicIpOnLaunch: False
+      Tags: 
+      - Key: 'Name'
+        Value: 'PrivateSubnetMSKOne'
+
+  PrivateSubnetMSKTwo:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone:
+        Fn::Select:
+        - 1
+        - Fn::GetAZs: {Ref: 'AWS::Region'}
+      CidrBlock: !FindInMap ['NetworkMap', 'PrivateSubnetMSKTwo', 'CIDR']
+      MapPublicIpOnLaunch: False
+      Tags: 
+      - Key: 'Name'
+        Value: 'PrivateSubnetMSKTwo'
+
+  PrivateSubnetMSKThree:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone:
+        Fn::Select:
+        - 2
+        - Fn::GetAZs: {Ref: 'AWS::Region'}
+      CidrBlock: !FindInMap ['NetworkMap', 'PrivateSubnetMSKThree', 'CIDR']
+      MapPublicIpOnLaunch: False
+      Tags: 
+      - Key: 'Name'
+        Value: 'PrivateSubnetMSKThree'
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  GatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: 
+      InternetGatewayId: !Ref 'InternetGateway'
+      VpcId: !Ref 'VPC'
+
+  NATGatewayEIP:
+    Type: AWS::EC2::EIP
+    DependsOn: GatewayAttachment
+    Properties: 
+      Domain: vpc
+
+  NATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties: 
+      AllocationId: !GetAtt NATGatewayEIP.AllocationId
+      SubnetId: !Ref 'PublicSubnetOne'
+      Tags: 
+        - Key: 'Name'
+          Value: 'NATGateway'
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref 'VPC'
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayAttachment
+    Properties:
+      RouteTableId: !Ref 'PublicRouteTable'
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref 'InternetGateway'
+
+  PublicSubnetOneRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetOne
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref 'VPC'
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref 'PrivateRouteTable'
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref 'NATGateway'
+
+  PrivateSubnetMSKOneRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnetMSKOne
+  
+  PrivateSubnetMSKTwoRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnetMSKTwo
+
+  PrivateSubnetMSKThreeRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnetMSKThree
+
+  # MSK /RESOURCES
+  MskSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: Kafka cluster security group
+      Tags: 
+        - Key: Name
+          Value: msk-cluster-sg
+      VpcId: !Ref VPC
+
+  KafkaClientSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: Kafka client security group Enable SSH and kafdrop access
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 9000
+          ToPort: 9000
+          CidrIp: 0.0.0.0/0
+      Tags: 
+        - Key: Name
+          Value: kafka-client-sg
+      VpcId: !Ref VPC
+
+  MskClusterSGIngressRuleZookeeperPT:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      IpProtocol: tcp
+      Description: ZooKeeper Plaintext
+      FromPort: 2181
+      GroupId: !Ref MskSecurityGroup
+      SourceSecurityGroupId: !Ref KafkaClientSecurityGroup
+      ToPort: 2181
+
+  MskClusterSGIngressRuleZookeeperTLS:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      IpProtocol: tcp
+      Description: ZooKeeper TLS
+      FromPort: 2182
+      GroupId: !Ref MskSecurityGroup
+      SourceSecurityGroupId: !Ref KafkaClientSecurityGroup
+      ToPort: 2182
+
+  MskClusterSGIngressRuleBootstrapServersPT:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      IpProtocol: tcp
+      Description: Bootstrap servers Plaintext
+      FromPort: 9092
+      GroupId: !Ref MskSecurityGroup
+      SourceSecurityGroupId: !Ref KafkaClientSecurityGroup
+      ToPort: 9092
+
+  MskClusterSGIngressRuleBootstrapServersTLS:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      IpProtocol: tcp
+      Description: Bootstrap servers TLS
+      FromPort: 9094
+      GroupId: !Ref MskSecurityGroup
+      SourceSecurityGroupId: !Ref KafkaClientSecurityGroup
+      ToPort: 9094
+
+  MskClusterSGIngressRuleSASLSCRAM:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      IpProtocol: tcp
+      Description: SASL/SCRAM
+      FromPort: 9096
+      GroupId: !Ref MskSecurityGroup
+      SourceSecurityGroupId: !Ref KafkaClientSecurityGroup
+      ToPort: 9096
+
+  MskClusterSGIngressRuleIAM:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      IpProtocol: tcp
+      Description: IAM
+      FromPort: 9098
+      GroupId: !Ref MskSecurityGroup
+      SourceSecurityGroupId: !Ref KafkaClientSecurityGroup
+      ToPort: 9098
+
+  MskClusterSGSelfIngressRule:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      IpProtocol: tcp
+      Description: Self Ingress
+      FromPort: 0
+      GroupId: !Ref MskSecurityGroup
+      SourceSecurityGroupId: !Ref MskSecurityGroup
+      ToPort: 65535
+
+  MskLogGroup:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      RetentionInDays: 731
+
+  MskCluster:
+    Type: AWS::MSK::Cluster
+    Properties: 
+      BrokerNodeGroupInfo: 
+        BrokerAZDistribution: DEFAULT
+        ClientSubnets: 
+          - !Ref PrivateSubnetMSKOne
+          - !Ref PrivateSubnetMSKTwo
+          - !Ref PrivateSubnetMSKThree 
+        InstanceType: !Ref BrokerInstanceType
+        SecurityGroups: 
+          - !Ref MskSecurityGroup
+        StorageInfo: 
+          EBSStorageInfo:
+            VolumeSize: !Ref EbsVolumeSize
+      ClientAuthentication:
+        Sasl:
+          Iam:
+            Enabled: True
+        Unauthenticated:
+          Enabled: True
+      ClusterName: !Join 
+        - '-'
+        - - kafka-cluster
+          - !Ref 'AWS::StackName'
+      EncryptionInfo:
+        EncryptionAtRest:
+          DataVolumeKMSKeyId: alias/aws/kafka
+        EncryptionInTransit:
+          ClientBroker: TLS
+          InCluster: True
+      EnhancedMonitoring: !Ref MonitoringLevel
+      KafkaVersion: !Ref KafkaVersion
+      NumberOfBrokerNodes: !Ref NumberBrokerNodes
+      LoggingInfo: 
+        BrokerLogs:
+          CloudWatchLogs:
+            Enabled: true
+            LogGroup: !Ref MskLogGroup
+      OpenMonitoring: 
+        Prometheus:
+          JmxExporter:
+            EnabledInBroker: True
+          NodeExporter:
+            EnabledInBroker: True
+
+  # KAFKA ADMIN CLIENT /RESOURCES
+  EC2InstanceServiceRole:
+    Type: AWS::IAM::Role
+    Properties: 
+      Description: Kafka Client EC2 Instance Service Role
+      RoleName: !Join
+        - '-'
+        - - EC2InstanceServiceRole
+          - !Ref 'AWS::StackName'
+      AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: !Join
+                  - ''
+                  - - ec2.
+                    - !Ref 'AWS::URLSuffix'
+              Action:
+                - 'sts:AssumeRole'
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - !Ref MskAccessPolicy
+        - !Ref EC2MonitoringPolicy
+        - !Ref S3AccessPolicy
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref EC2InstanceServiceRole
+
+  KafkaClient:
+    Type: AWS::EC2::Instance
+    DependsOn: CanvasApp
+    CreationPolicy: 
+      ResourceSignal:
+        Timeout: PT15M
+    Properties: 
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      ImageId: !Ref ClientAmiId
+      InstanceType: !Ref ClientInstanceType
+      SecurityGroupIds: 
+        - !Ref KafkaClientSecurityGroup
+      SubnetId: !Ref PublicSubnetOne
+      Tags: 
+        - Key: Name
+          Value: KafkaClient
+      UserData:  
+        Fn::Base64: 
+          !Sub
+            - |
+              #!/bin/bash -xe
+
+              #### Yum update and installation of required OS packages
+              yum update -y
+              yum install -y python3 docker java-17-amazon-corretto-headless
+
+              #### Download and install the AWSCLIv2
+              rm -rf /usr/bin/aws
+              curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+              unzip awscliv2.zip
+              ./aws/install
+
+              #### Pull demo transaction file from S3
+              cd /home/ec2-user
+              aws s3api get-object --bucket ${MyAssetsBucketName} --key ${MyAssetsBucketPrefix}${TransactionFlow} ${TransactionFlow}
+              aws s3api put-object --bucket sagemaker-${AWS::Region}-${AWS::AccountId} --key ${TransactionFlow} --body ${TransactionFlow}
+
+              #### Pull demo transaction file from S3
+              cd /home/ec2-user
+              aws s3api get-object --bucket ${MyAssetsBucketName} --key ${MyAssetsBucketPrefix}${DemoData} ${DemoData}
+              aws s3api put-object --bucket sagemaker-${AWS::Region}-${AWS::AccountId} --key ${DemoData} --body ${DemoData}
+
+              #### Install Kafka admin
+              mkdir -p /home/kafka && cd /home/kafka
+              wget https://archive.apache.org/dist/kafka/${KafkaVersion}/kafka_2.13-${KafkaVersion}.tgz
+              tar -xzf kafka_2.13-${KafkaVersion}.tgz --strip 1 && rm kafka_2.13-${KafkaVersion}.tgz
+
+              #### Configure IAM Authentication
+              wget https://github.com/aws/aws-msk-iam-auth/releases/download/v${MskIamAuthVersion}/aws-msk-iam-auth-${MskIamAuthVersion}-all.jar
+              mv aws-msk-iam-auth-${MskIamAuthVersion}-all.jar ./libs
+              find /usr/lib/jvm/ -name "cacerts" | xargs -I '{}' cp '{}' /tmp/kafka.client.truststore.jks
+              
+              #### Create SSL Property file
+              touch bin/client-ssl.properties
+              echo "security.protocol=SSL" >> bin/client-ssl.properties
+              echo "ssl.truststore.location=/tmp/kafka.client.truststore.jks" >> bin/client-ssl.properties
+              
+              #### Create SASL Property file
+              touch bin/client-sasl.properties
+              echo "security.protocol=SASL_SSL" >> bin/client-sasl.properties
+              echo "sasl.mechanism=SCRAM-SHA-512" >> bin/client-sasl.properties
+              echo "ssl.truststore.location=/tmp/kafka.client.truststore.jks" >> bin/client-sasl.properties
+              
+              #### Create IAM Property file
+              touch bin/client-iam.properties
+              echo "security.protocol=SASL_SSL" >> bin/client-iam.properties
+              echo "sasl.mechanism=AWS_MSK_IAM" >> bin/client-iam.properties
+              echo "sasl.jaas.config=software.amazon.msk.auth.iam.IAMLoginModule required;" >> bin/client-iam.properties
+              echo "sasl.client.callback.handler.class=software.amazon.msk.auth.iam.IAMClientCallbackHandler" >> bin/client-iam.properties
+
+              #### Setup cluster environment variables for Cluster, Bootstrap servers (UnAUth, IAM)
+              echo export MSK_ARN=${MSKARN} >> /home/kafka/bin/msk.env
+              echo -E export MSK_BOOTSTRAP=`aws kafka get-bootstrap-brokers --cluster-arn ${MSKARN} --query BootstrapBrokerStringTls --region ${AWS::Region}` >> /home/kafka/bin/msk.env
+              echo -E export MSKIAM_BOOTSTRAP=`aws kafka get-bootstrap-brokers --cluster-arn ${MSKARN} --query BootstrapBrokerStringSaslIam --region ${AWS::Region}` >> /home/kafka/bin/msk.env
+
+              source /home/kafka/bin/msk.env
+              export $(cut -d= -f1 /home/kafka/bin/msk.env)
+
+              #### Create topics
+              echo -E /home/kafka/bin/kafka-topics.sh --create --topic ${DemoTransactionsTopic} --partitions 3 --replication-factor 3 retention.ms=3600000 --bootstrap-server $MSKIAM_BOOTSTRAP --command-config /home/kafka/bin/client-iam.properties >> /home/kafka/bin/msktopic.sh
+              echo -E /home/kafka/bin/kafka-topics.sh --create --topic ${FlaggedTransactionsTopic} --partitions 3 --replication-factor 3 retention.ms=3600000 --bootstrap-server $MSKIAM_BOOTSTRAP --command-config /home/kafka/bin/client-iam.properties >> /home/kafka/bin/msktopic.sh
+              echo -E /home/kafka/bin/kafka-topics.sh --create --topic ${ProcessedTransactionsTopic} --partitions 3 --replication-factor 3 retention.ms=3600000 --bootstrap-server $MSKIAM_BOOTSTRAP --command-config /home/kafka/bin/client-iam.properties >> /home/kafka/bin/msktopic.sh
+
+              chmod u+x /home/kafka/bin/msktopic.sh
+              /home/kafka/bin/msktopic.sh
+
+              #### Validate
+              /home/kafka/bin/kafka-topics.sh --list --bootstrap-server $MSKIAM_BOOTSTRAP --command-config /home/kafka/bin/client-iam.properties > /home/ec2-user/topicslist.txt
+              
+              #### Installing Kafdrop (SSL)
+              service docker start
+
+              mkdir /home/kafdrop
+              cd /home/kafdrop
+              cp /home/kafka/bin/client-ssl.properties kafka.properties
+
+              docker pull obsidiandynamics/kafdrop
+
+              #Connecting Kafdrop to MSK Cluster
+              docker run -d --rm -p 9000:9000 -v /home/kafdrop/kafka.properties:/tmp/kafka.properties:ro -v /tmp/kafka.client.truststore.jks:/tmp/kafka.client.truststore.jks:ro -e KAFKA_BROKERCONNECT=$MSK_BOOTSTRAP -e KAFKA_PROPERTIES_FILE=/tmp/kafka.properties -e JVM_OPTS="-Xms32M -Xmx64M" -e SERVER_SERVLET_CONTEXTPATH="/" obsidiandynamics/kafdrop
+
+              cfn-signal -e $? --stack ${AWS::StackName} --resource KafkaClient --region ${AWS::Region}
+            - MSKARN: !Ref MskCluster
+
+  # GET CLUSTER DETAILS /RESOURCES
+  LambdaGetClusterDetailsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Lambda get cluster details role
+      RoleName: !Join
+        - '-'
+        - - LambdaGetClusterDetailsRole
+          - !Ref 'AWS::StackName'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - !Ref LambdaVPCAccessPolicy
+        - !Ref LambdaLoggingPolicy
+        - !Ref MskAccessPolicy
+
+  LambdaGetClusterDetails:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import cfnresponse
+
+          client = boto3.client('kafka')
+
+          def lambda_handler(event, context):
+              
+            response = {}
+            try: 
+              if event['RequestType'] == 'Create':
+                bootstrap_brokers = {}
+                
+                bootstrap_brokers = client.get_bootstrap_brokers(
+                  ClusterArn=event['ResourceProperties']['ClusterArn']
+                )
+      
+                response = {
+                  'IamBootstrapServers': bootstrap_brokers['BootstrapBrokerStringSaslIam']
+                }
+
+                print("sending bootstrap brokers url")
+              
+              print("Sending response to event: ", event['RequestType'])
+              print("Response: ", response)
+              cfnresponse.send(event, context, cfnresponse.SUCCESS, response, event['LogicalResourceId'])
+
+            except Exception as e:
+              print("Failed getting bootstrap brokers:", e)
+              cfnresponse.send(event, context, cfnresponse.FAILED, response, event['LogicalResourceId'])
+      Handler: index.lambda_handler
+      Runtime: python3.10
+      Role: !GetAtt LambdaGetClusterDetailsRole.Arn
+      MemorySize: 512
+      Timeout: 30
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref KafkaClientSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnetMSKOne
+          - !Ref PrivateSubnetMSKTwo
+          - !Ref PrivateSubnetMSKThree
+
+  GetClusterDetails:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceToken: !GetAtt LambdaGetClusterDetails.Arn
+      ClusterArn: !Ref MskCluster
+
+  # TRANSACTION GENERATOR /RESOURCES
+  TransactionGeneratorProducer:
+    Type: AWS::Lambda::Function
+    Properties: 
+      Description: Transaction Generator Function
+      Code: 
+        S3Bucket: !Ref MyAssetsBucketName
+        S3Key: !Sub '${MyAssetsBucketPrefix}${TransactionGeneratorProducerZip}'
+      Layers:
+        - !Ref TransactionGeneratorProducerLambdaLayer
+      Environment: 
+        Variables: 
+          S3_BUCKET: !Ref MyAssetsBucketName
+          S3_KEY: !Sub '${MyAssetsBucketPrefix}${TransactionGeneratorFile}'
+          KAFKA_BOOTSTRAP_SERVERS: !Sub '${GetClusterDetails.IamBootstrapServers}'
+          KAFKA_TOPIC: !Ref DemoTransactionsTopic
+          REGION: !Sub ${AWS::Region}
+      EphemeralStorage: 
+        Size: 1024
+      Handler: lambda_function.lambda_handler
+      MemorySize: 512
+      Role: !GetAtt TransactionGeneratorProducerRole.Arn
+      Runtime: python3.11
+      Timeout: 300
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref KafkaClientSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnetMSKOne
+          - !Ref PrivateSubnetMSKTwo
+          - !Ref PrivateSubnetMSKThree
+
+  TransactionGeneratorProducerLambdaLayer:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      LayerName: transaction-generator-lambda-layer
+      Description: Lambda Layer for Kafka Producer Transaction Generator
+      Content:
+        S3Bucket: !Sub '${MyAssetsBucketName}'
+        S3Key: !Sub '${MyAssetsBucketPrefix}${TransactionGeneratorProducerLayerZip}'
+      CompatibleRuntimes:
+        - python3.11
+
+  TransactionGeneratorProducerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Lambda transaction generator role
+      RoleName: !Join
+        - '-'
+        - - TransactionGeneratorProducerRole
+          - !Ref 'AWS::StackName'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - !Ref LambdaVPCAccessPolicy
+        - !Ref LambdaLoggingPolicy
+        - !Ref S3AccessPolicy
+        - !Ref MskAccessPolicy
+
+  TransactionGeneratorProducerEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Schedulec event to trigger transaction generator function every 5 min
+      EventBusName: default
+      Name: !Join
+        - '-'
+        - - TransactionGeneratorProducerEventRule
+          - !Ref 'AWS::StackName'
+      ScheduleExpression: rate(5 minutes)
+      State: DISABLED
+      Targets:
+        - Arn: !GetAtt TransactionGeneratorProducer.Arn
+          Id: "TxGnId1"
+
+  TransactionGeneratorProducerEventPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt TransactionGeneratorProducer.Arn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceAccount: !Ref 'AWS::AccountId'
+      SourceArn: !GetAtt TransactionGeneratorProducerEventRule.Arn
+
+  # FRAUD FLAG /RESOURCES
+  FraudFlagTransactionProducer:
+    Type: AWS::Lambda::Function
+    Properties: 
+      Code: 
+        S3Bucket: !Ref MyAssetsBucketName
+        S3Key: !Sub "${MyAssetsBucketPrefix}${FraudFlagTransactionProducerZip}"
+      Layers:
+        - !Ref FraudFlagTransactionProducerLambdaLayer
+      Description: Fraud Flag Transaction Function
+      Environment: 
+        Variables: 
+          BOOTSTRAP_SERVERS_CONFIG: !Sub '${GetClusterDetails.IamBootstrapServers}'
+          TOPIC_NAME: !Ref FlaggedTransactionsTopic
+      Handler: index.handler
+      Runtime: nodejs18.x
+      Role: !GetAtt FraudFlagTransactionProducerRole.Arn
+      MemorySize: 256
+      Timeout: 60
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref KafkaClientSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnetMSKOne
+          - !Ref PrivateSubnetMSKTwo
+          - !Ref PrivateSubnetMSKThree
+
+  FraudFlagTransactionProducerLambdaLayer:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      LayerName: fraud-flag-transaction-producer-lambda-layer
+      Description: Lambda Layer for Kafka Producer Fraud Flag Transaction
+      Content:
+        S3Bucket: !Sub '${MyAssetsBucketName}'
+        S3Key: !Sub '${MyAssetsBucketPrefix}${FraudFlagTransactionProducerLayerZip}'
+      CompatibleRuntimes:
+        - python3.11
+
+  FraudFlagTransactionProducerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Lambda transaction generator role
+      RoleName: !Join
+        - '-'
+        - - FraudFlagTransactionProducerRole
+          - !Ref 'AWS::StackName'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSGlueSchemaRegistryFullAccess
+        - !Ref LambdaVPCAccessPolicy
+        - !Ref LambdaLoggingPolicy
+        - !Ref S3AccessPolicy
+        - !Ref MskAccessPolicy
+
+  # MSF /RESOURCES
+  MSFServiceExecutionRole:
+    Type: AWS::IAM::Role
+    Properties: 
+      Description: MSF Studio Service Role
+      RoleName: !Join
+        - '-'
+        - - MSFServiceExecutionRole
+          - !Ref 'AWS::StackName'
+      AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: !Join
+                  - ''
+                  - - kinesisanalytics.
+                    - !Ref 'AWS::URLSuffix'
+              Action:
+                - 'sts:AssumeRole'
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/AmazonKinesisAnalyticsFullAccess
+        - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+        - !Ref S3AccessPolicy
+        - !Ref MSFVPCPolicy
+        - !Ref MSFGlueDatabasePolicy
+        - !Ref MskAccessPolicy
+
+  MSFLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties: 
+      RetentionInDays: 365
+
+  MSFLogStream: 
+    Type: AWS::Logs::LogStream
+    Properties: 
+      LogGroupName: !Ref MSFLogGroup
+
+  MSFGlueDatabase:
+    Type: AWS::Glue::Database
+    Properties: 
+      CatalogId: !Ref 'AWS::AccountId'
+      DatabaseInput: 
+        Description: !Join
+          - ' '
+          - - !Ref 'AWS::StackName'
+            - Workshop Database 
+        Name: !Join
+          - '-'
+          - - database
+            - !Ref 'AWS::StackName'
+
+  MSFStudioApp: 
+    Type: AWS::KinesisAnalyticsV2::Application
+    Properties:
+      ApplicationMode: INTERACTIVE
+      RuntimeEnvironment: ZEPPELIN-FLINK-3_0
+      ServiceExecutionRole: !GetAtt MSFServiceExecutionRole.Arn
+      ApplicationConfiguration:
+        VpcConfigurations:
+          - SecurityGroupIds:
+              - !Ref KafkaClientSecurityGroup
+            SubnetIds:
+              - !Ref PrivateSubnetMSKOne
+              - !Ref PrivateSubnetMSKTwo
+              - !Ref PrivateSubnetMSKThree
+        FlinkApplicationConfiguration:
+          ParallelismConfiguration:
+            ConfigurationType: CUSTOM
+            Parallelism: 4
+            ParallelismPerKPU: 4
+            AutoScalingEnabled: False
+          MonitoringConfiguration:
+            ConfigurationType: CUSTOM
+            LogLevel: INFO
+        ZeppelinApplicationConfiguration:
+          CatalogConfiguration:
+            GlueDataCatalogConfiguration:
+              DatabaseARN: !Join
+                - ''
+                - - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/"
+                  - !Ref MSFGlueDatabase
+          MonitoringConfiguration:
+            LogLevel: INFO
+          CustomArtifactsConfiguration:
+            - ArtifactType: DEPENDENCY_JAR
+              MavenReference:
+                GroupId: org.apache.flink
+                ArtifactId: flink-sql-connector-kinesis
+                Version: 1.15.4
+            - ArtifactType: DEPENDENCY_JAR
+              MavenReference:
+                GroupId: org.apache.flink
+                ArtifactId: flink-connector-kafka
+                Version: 1.15.4
+            - ArtifactType: DEPENDENCY_JAR
+              MavenReference:
+                GroupId: software.amazon.msk
+                ArtifactId: aws-msk-iam-auth
+                Version: 1.1.6
+          DeployAsApplicationConfiguration: 
+            S3ContentLocation: 
+              BucketARN: !GetAtt S3DataBucket.Arn
+
+  MSFLogging:
+    Type: AWS::KinesisAnalyticsV2::ApplicationCloudWatchLoggingOption
+    Properties: 
+      ApplicationName: !Ref MSFStudioApp
+      CloudWatchLoggingOption: 
+        LogStreamARN: !Join
+          - ''
+          - - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:'
+            - !Ref MSFLogGroup
+            - ':log-stream:'
+            - !Ref MSFLogStream
+
+  # DYNAMODB /RESOURCES
+  ProcessedTransactionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        -
+          AttributeName: "entity_id"
+          AttributeType: "S"
+        -
+          AttributeName: "event_timestamp"
+          AttributeType: "S"
+      KeySchema:
+        -
+          AttributeName: "entity_id"
+          KeyType: "HASH"
+        -
+          AttributeName: "event_timestamp"
+          KeyType: "RANGE"
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      TableName: "processed_transactions"
+
+  CityLookUpTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        -
+          AttributeName: "city_key"
+          AttributeType: "S"
+      KeySchema:
+        -
+          AttributeName: "city_key"
+          KeyType: "HASH"
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      TableName: "lookup_city"
+
+  StateLookUpTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        -
+          AttributeName: "state_key"
+          AttributeType: "S"
+      KeySchema:
+        -
+          AttributeName: "state_key"
+          KeyType: "HASH"
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      TableName: "lookup_state"
+
+  UserAgentLookUpTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        -
+          AttributeName: "user_agent_id"
+          AttributeType: "S"
+      KeySchema:
+        -
+          AttributeName: "user_agent_id"
+          KeyType: "HASH"
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      TableName: "lookup_user_agent"
+
+  ProductCategoryLookUpTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        -
+          AttributeName: "product_category_id"
+          AttributeType: "S"
+      KeySchema:
+        -
+          AttributeName: "product_category_id"
+          KeyType: "HASH"
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      TableName: "lookup_product_category"
+
+  PaymentCurrencyLookUpTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        -
+          AttributeName: "payment_currency_id"
+          AttributeType: "S"
+      KeySchema:
+        -
+          AttributeName: "payment_currency_id"
+          KeyType: "HASH"
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      TableName: "lookup_payment_currency"
+
+  MerchantLookUpTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        -
+          AttributeName: "merchant_id"
+          AttributeType: "S"
+      KeySchema:
+        -
+          AttributeName: "merchant_id"
+          KeyType: "HASH"
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      TableName: "lookup_merchant"
+
+  DynamoDBAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties: 
+      Description: DynamoDB Access for Lambda Consumer
+      ManagedPolicyName: !Join
+        - '-'
+        - - DynamoDBAccessPolicy
+          - !Ref 'AWS::StackName'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ListAndDescribe
+            Effect: Allow
+            Action:
+              - 'dynamodb:List*'
+              - 'dynamodb:DescribeReservedCapacity*'
+              - 'dynamodb:DescribeLimits'
+              - 'dynamodb:DescribeTimeToLive'
+            Resource: '*'
+          - Sid: SpecificTables
+            Effect: Allow
+            Action:
+              - 'dynamodb:BatchGet*'
+              - 'dynamodb:DescribeStream'
+              - 'dynamodb:DescribeTable'
+              - 'dynamodb:Get*'
+              - 'dynamodb:Query'
+              - 'dynamodb:Scan'
+              - 'dynamodb:BatchWrite*'
+              - 'dynamodb:CreateTable'
+              - 'dynamodb:Delete*'
+              - 'dynamodb:Update*'
+              - 'dynamodb:PutItem'
+            Resource: 
+              - !GetAtt ProcessedTransactionsTable.Arn
+              - !GetAtt CityLookUpTable.Arn
+              - !GetAtt StateLookUpTable.Arn
+              - !GetAtt UserAgentLookUpTable.Arn
+              - !GetAtt ProductCategoryLookUpTable.Arn
+              - !GetAtt PaymentCurrencyLookUpTable.Arn
+              - !GetAtt MerchantLookUpTable.Arn
+
+  PrepopulateDynamoDBTablesFunction:
+    Type: AWS::Lambda::Function
+    Properties: 
+      Description: DynamoDB Table Bootstrap
+      Code: 
+        ZipFile: |
+          import json
+          import csv
+          import os
+          import boto3
+          import cfnresponse
+
+          # ENVIRONEMNT VARIABLES
+          S3_BUCKET = os.environ['S3_BUCKET']
+          REGION = os.environ['REGION']
+          CITY_FILE = os.environ['CITY_FILE']
+          STATE_FILE = os.environ['STATE_FILE']
+          USER_AGENT_FILE = os.environ['USER_AGENT_FILE']
+          PRODUCT_CATEGORY_FILE = os.environ['PRODUCT_CATEGORY_FILE']
+          PAYMENT_CURRENCY_FILE = os.environ['PAYMENT_CURRENCY_FILE']
+          MERCHANT_FILE = os.environ['MERCHANT_FILE']
+
+          # INITIALIZE CLIENTS
+          s3 = boto3.client('s3')
+          ddb = boto3.resource('dynamodb', region_name=REGION)
+
+          # GET FILE FROM S3 AND LOAD DATA INTO DYNAMODB
+          def get_file_load_table(file_name, table_name):
+            obj = s3.get_object(Bucket=S3_BUCKET, Key=file_name)
+            csvfile = obj['Body'].read().decode('utf-8').splitlines()
+            reader = csv.reader(csvfile)
+            header = next(reader)
+            table = ddb.Table(table_name)
+
+            with table.batch_writer() as batch:
+              while True:
+                chunk = []
+                try:
+                  for _ in range(25):
+                    chunk.append(next(reader))
+                except StopIteration:
+                  pass
+
+                if not chunk:
+                  break
+
+                for row in chunk:
+                  batch.put_item(Item={header[0]: str(row[0]).replace("\"",""), header[1]: row[1]})
+
+              response = {
+                "statusCode": 200,
+                "body": json.dumps({
+                  "message": f"File {file_name} was loaded sucessfully"
+                })
+              }
+            return response
+
+          # LAMBDA HANDLER
+          def lambda_handler(event, context):
+            response = {}
+            try: 
+              if event['RequestType'] == 'Create':
+                
+                #Get table names
+                lookup_city = event['ResourceProperties']['CityTable']
+                lookup_state = event['ResourceProperties']['StateTable']
+                lookup_user_agent = event['ResourceProperties']['UserAgentTable']
+                lookup_product_category = event['ResourceProperties']['ProductCategoryTable']
+                lookup_payment_currency = event['ResourceProperties']['PaymentCurrencyTable']
+                lookup_merchant = event['ResourceProperties']['MerchantTable']
+                
+                files_tables = [
+                  {"file_name": CITY_FILE,"table_name": lookup_city},
+                  {"file_name": STATE_FILE,"table_name": lookup_state},
+                  {"file_name": USER_AGENT_FILE,"table_name": lookup_user_agent},
+                  {"file_name": PRODUCT_CATEGORY_FILE,"table_name": lookup_product_category},
+                  {"file_name": PAYMENT_CURRENCY_FILE,"table_name": lookup_payment_currency},
+                  {"file_name": MERCHANT_FILE,"table_name": lookup_merchant}
+                ]
+
+                load_response = []
+                for item in files_tables:
+                  if item['file_name'] and item['table_name']:
+                    print("Loading file: " + item["file_name"])
+                    message = get_file_load_table(item["file_name"],item["table_name"])
+                    load_response.append(message)
+                  else:
+                    continue
+
+                print("Sending response to event: ", event['RequestType'])
+                response = {
+                  "statusCode": 200,
+                  "body": json.dumps({
+                    "message": load_response
+                  })
+                }
+                print("Response: ", response)
+              cfnresponse.send(event, context, cfnresponse.SUCCESS, response, event['LogicalResourceId'])
+              return response
+            except Exception as e:
+                print("Failed to load files:", e)
+                cfnresponse.send(event, context, cfnresponse.FAILED, response, event['LogicalResourceId'])
+      Environment: 
+        Variables: 
+          CITY_FILE: !Sub ${MyAssetsBucketPrefix}${CityData}
+          STATE_FILE: !Sub ${MyAssetsBucketPrefix}${StateData}
+          USER_AGENT_FILE: !Sub ${MyAssetsBucketPrefix}${UserAgentData}
+          PRODUCT_CATEGORY_FILE: !Sub ${MyAssetsBucketPrefix}${ProductCategoryData}
+          PAYMENT_CURRENCY_FILE: !Sub ${MyAssetsBucketPrefix}${PaymentCurrencyData}
+          MERCHANT_FILE: !Sub ${MyAssetsBucketPrefix}${MerchantData}
+          S3_BUCKET: !Ref MyAssetsBucketName
+          REGION: !Sub ${AWS::Region}
+      Handler: index.lambda_handler
+      Runtime: python3.10
+      Role: !GetAtt FraudScoringConsumerRole.Arn
+      MemorySize: 512
+      Timeout: 300
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref KafkaClientSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnetMSKOne
+          - !Ref PrivateSubnetMSKTwo
+          - !Ref PrivateSubnetMSKThree
+
+  PrepopulateDynamoDBTables:
+    Type: Custom::MyCustomResource
+    Properties:
+      ServiceToken: !GetAtt PrepopulateDynamoDBTablesFunction.Arn
+      CityTable: !Ref CityLookUpTable
+      StateTable: !Ref StateLookUpTable
+      UserAgentTable: !Ref UserAgentLookUpTable
+      ProductCategoryTable: !Ref ProductCategoryLookUpTable
+      PaymentCurrencyTable: !Ref PaymentCurrencyLookUpTable
+      MerchantTable: !Ref MerchantLookUpTable
+
+  PrepopulateDynamoDBTablesFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Prepopulate DynamoDB Tables Function Role
+      RoleName: !Join
+        - '-'
+        - - PrepopulateDynamoDBTablesFunctionRole
+          - !Ref 'AWS::StackName'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - !Ref LambdaVPCAccessPolicy
+        - !Ref LambdaLoggingPolicy
+        - !Ref S3AccessPolicy
+        - !Ref DynamoDBAccessPolicy
+
+  # FRAUD SCORING /RESOURCES
+  FraudScoringConsumerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Fraud Scoring Consumer Role
+      RoleName: !Join
+        - '-'
+        - - FraudScoringConsumerRole
+          - !Ref 'AWS::StackName'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+        - !Ref LambdaVPCAccessPolicy
+        - !Ref LambdaLoggingPolicy
+        - !Ref S3AccessPolicy
+        - !Ref MskAccessPolicy
+        - !Ref DynamoDBAccessPolicy
+
+  FraudScoringConsumer:
+    Type: AWS::Lambda::Function
+    Properties: 
+      Description: Fraud scoring function. MSK Consumer triggered by MSK event trigger
+      Code: 
+        S3Bucket: !Ref MyAssetsBucketName
+        S3Key: !Sub '${MyAssetsBucketPrefix}${FraudScoringConsumerZip}'
+      Environment: 
+        Variables: 
+          LOOKUP_CITY: !Ref CityLookUpTable
+          LOOKUP_STATE: !Ref StateLookUpTable
+          LOOKUP_USER_AGENT: !Ref UserAgentLookUpTable
+          LOOKUP_PRODUCT_CATEGORY: !Ref ProductCategoryLookUpTable
+          LOOKUP_PAYMENT_CURRENCY: !Ref PaymentCurrencyLookUpTable
+          LOOKUP_MERCHANT: !Ref MerchantLookUpTable
+          PROCESSED_TRANSACTIONS: !Ref ProcessedTransactionsTable
+          INFERENCE_ENDPOINT: !GetAtt ModelEndpoint.EndpointName
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.10
+      Role: !GetAtt FraudScoringConsumerRole.Arn
+      MemorySize: 1024
+      Timeout: 300
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref KafkaClientSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnetMSKOne
+          - !Ref PrivateSubnetMSKTwo
+          - !Ref PrivateSubnetMSKThree
+
+  FraudScoringConsumerEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties: 
+      Enabled: False
+      EventSourceArn: !Ref MskCluster
+      FunctionName: !GetAtt FraudScoringConsumer.Arn
+      StartingPosition: TRIM_HORIZON
+      Topics: 
+        - !Ref ProcessedTransactionsTopic
+
+  # SAGEMAKER /RESOURCES
+  ModelEndpoint:
+    Type: "AWS::SageMaker::Endpoint"
+    Properties:
+      EndpointName: !Sub 'model-endpoint-${AWS::StackName}'
+      EndpointConfigName: !GetAtt ModelEndpointConfig.EndpointConfigName
+
+  ModelEndpointConfig:
+    Type: "AWS::SageMaker::EndpointConfig"
+    Properties:
+      EndpointConfigName: !Sub 'endpoint-config-${AWS::Region}-${AWS::StackName}'
+      ProductionVariants:
+        - InitialInstanceCount: 1
+          InitialVariantWeight: 1.0
+          InstanceType: !Ref ModelInstanceType
+          ModelName: !GetAtt Model.ModelName
+          VariantName: !GetAtt Model.ModelName
+
+  Model:
+    Type: "AWS::SageMaker::Model"
+    Properties:
+      PrimaryContainer:
+        Image: !FindInMap [ModelContainerMap, !Ref "AWS::Region", ModelImage]
+        Mode: SingleModel
+        ModelDataUrl: !Sub 's3://${MyAssetsBucketName}/${MyAssetsBucketPrefix}${ModelData}'
+      ExecutionRoleArn: !GetAtt ModelExecutionRole.Arn
+      ModelName: !Sub 'workshop-model-${AWS::StackName}'
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref SagemakerModelSecurityGroup
+        Subnets:
+          - !Ref PrivateSubnetMSKOne
+          - !Ref PrivateSubnetMSKTwo
+          - !Ref PrivateSubnetMSKThree
+
+  ModelExecutionRole: 
+    Type: "AWS::IAM::Role"
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "sagemaker.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+
+  SagemakerModelSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: Sagemaker Model Endpoint Security Group
+      Tags: 
+        - Key: Name
+          Value: sagemaker-sg
+      VpcId: !Ref VPC
+
+  SageMakerDomain:
+    Type: AWS::SageMaker::Domain
+    Properties:
+      AppNetworkAccessType: !Ref NetworkAccessType
+      AuthMode: !Ref AuthMode
+      DefaultUserSettings:
+        ExecutionRole: !GetAtt SageMakerExecutionRole.Arn
+        SecurityGroups: 
+          - !Ref SageMakerSecurityGroup
+      DomainName: !Ref DomainName
+      SubnetIds: 
+        - !Ref PublicSubnetOne
+      VpcId: !Ref VPC
+
+  SageMakerExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: sagemaker.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/AmazonVPCFullAccess
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+        - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+        - arn:aws:iam::aws:policy/AmazonSageMakerCanvasFullAccess
+
+  SageMakerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: Sagemaker Security Group
+      Tags: 
+        - Key: Name
+          Value: SageMakerDomain-sg
+      VpcId: !Ref VPC
+  
+  SageMakerUserProfile:
+    Type: AWS::SageMaker::UserProfile
+    Properties:
+      DomainId: !GetAtt SageMakerDomain.DomainId
+      Tags: 
+        - Key: ProjectName
+          Value: !Ref ProjectName
+      UserProfileName: !Ref UserProfileName
+      UserSettings: 
+        ExecutionRole: !GetAtt SageMakerExecutionRole.Arn
+        SecurityGroups: 
+          - !Ref SageMakerSecurityGroup
+
+  JupyterLabSpace:
+    Type: AWS::SageMaker::Space
+    DependsOn: SageMakerUserProfile
+    Properties:
+      DomainId: !GetAtt SageMakerDomain.DomainId
+      OwnershipSettings: 
+        OwnerUserProfileName: !Ref UserProfileName
+      SpaceSharingSettings: 
+        SharingType: Private
+      SpaceDisplayName: labspace
+      SpaceName: labspace
+      SpaceSettings: 
+        AppType: JupyterLab
+        JupyterLabAppSettings: 
+          DefaultResourceSpec: 
+            InstanceType: !Ref JupyterLabInstanceType
+        SpaceStorageSettings: 
+          EbsStorageSettings: 
+            EbsVolumeSizeInGb: 5
+
+  CanvasApp:
+    Type: AWS::SageMaker::App
+    DependsOn: SageMakerUserProfile
+    Properties:
+      AppName: default
+      AppType: Canvas
+      DomainId: !GetAtt SageMakerDomain.DomainId
+      ResourceSpec: 
+        InstanceType: system
+      UserProfileName: !Ref UserProfileName
+
+Outputs:
+  Kafdrop:
+    Description: Kafdrop Kafka Web UI
+    Value: !Sub 'http://${KafkaClient.PublicIp}:9000'
