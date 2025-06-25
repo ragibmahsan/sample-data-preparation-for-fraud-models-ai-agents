@@ -5,36 +5,41 @@ interface ChatMessage {
     timestamp: Date;
 }
 
-export const sendMessage = async (message: string): Promise<ChatMessage> => {
-    // TODO: Implement actual API call to Lambda function
-    // This is a placeholder that simulates an API response
-    return {
-        id: Date.now().toString(),
-        content: `I received your message: "${message}". This is a placeholder response.`,
-        sender: 'bot',
-        timestamp: new Date()
-    };
+// Configuration for API endpoint
+const API_CONFIG = {
+    CHAT_ENDPOINT: process.env.REACT_APP_API_GATEWAY_ENDPOINT || ''
 };
 
-export const handleQuickAction = async (type: string, data: Record<string, string>): Promise<ChatMessage> => {
-    // TODO: Implement actual API call to Lambda function
-    let response = '';
+export const sendMessage = async (message: string): Promise<ChatMessage> => {
+    try {
+        const response = await fetch(API_CONFIG.CHAT_ENDPOINT + '/chat', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                message
+            })
+        });
 
-    switch (type) {
-        case 'Data Analysis':
-            response = `I'll analyze ${data.q1} for the period: ${data.q2}. Analysis results will be available shortly.`;
-            break;
-        case 'Generate Report':
-            response = `I'll generate a ${data.q1} report including: ${data.q2}. The report will be ready soon.`;
-            break;
-        default:
-            response = 'I received your request and will process it shortly.';
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return {
+            id: Date.now().toString(),
+            content: data.content,
+            sender: 'bot',
+            timestamp: new Date()
+        };
+    } catch (error) {
+        console.error('Error calling chat endpoint:', error);
+        return {
+            id: Date.now().toString(),
+            content: 'Sorry, I encountered an error processing your request. Please try again.',
+            sender: 'bot',
+            timestamp: new Date()
+        };
     }
-
-    return {
-        id: Date.now().toString(),
-        content: response,
-        sender: 'bot',
-        timestamp: new Date()
-    };
 };

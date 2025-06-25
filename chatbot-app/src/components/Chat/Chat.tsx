@@ -1,6 +1,5 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { useLocation } from 'react-router-dom';
-import { sendMessage, handleQuickAction } from '../../services/api';
+import React, { useState, useRef, useEffect } from 'react';
+import { sendMessage } from '../../services/api';
 import './Chat.css';
 
 interface Message {
@@ -10,15 +9,7 @@ interface Message {
     timestamp: Date;
 }
 
-interface LocationState {
-    quickAction?: {
-        type: string;
-        data: Record<string, string>;
-    };
-}
-
 const Chat: React.FC = () => {
-    const location = useLocation();
     const [messages, setMessages] = useState<Message[]>([]);
     const [inputValue, setInputValue] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -31,37 +22,6 @@ const Chat: React.FC = () => {
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
-
-    const handleQuickActionState = useCallback(async () => {
-        const state = location.state as LocationState;
-        if (state?.quickAction) {
-            setIsLoading(true);
-            try {
-                const response = await handleQuickAction(
-                    state.quickAction.type,
-                    state.quickAction.data
-                );
-                setMessages(prev => [...prev, response]);
-            } catch (error) {
-                console.error('Error handling quick action:', error);
-                setMessages(prev => [
-                    ...prev,
-                    {
-                        id: Date.now().toString(),
-                        content: 'Sorry, there was an error processing your request.',
-                        sender: 'bot',
-                        timestamp: new Date()
-                    }
-                ]);
-            } finally {
-                setIsLoading(false);
-            }
-        }
-    }, [location.state]);
-
-    useEffect(() => {
-        handleQuickActionState();
-    }, [handleQuickActionState]);
 
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
