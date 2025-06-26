@@ -94,6 +94,38 @@
 }
 
 .send-button:disabled {
-    background-color: #6c757d;
+    background-color: #ccc;
     cursor: not-allowed;
+}
+
+.quick-actions {
+    padding: 1rem;
+    border-top: 1px solid #e0e0e0;
+    background-color: #f8f9fa;
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.quick-action-button {
+    padding: 0.5rem 1rem;
+    background-color: #fff;
+    border: 1px solid #007bff;
+    color: #007bff;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.quick-action-button:hover {
+    background-color: #007bff;
+    color: #fff;
+}
+
+.quick-action-button:active {
+    transform: translateY(1px);
 }

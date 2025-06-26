@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { sendMessage } from '../../services/api';
 import './Chat.css';
 
@@ -10,20 +11,15 @@ interface Message {
 }
 
 const Chat: React.FC = () => {
+    const location = useLocation();
     const [messages, setMessages] = useState<Message[]>([]);
     const [inputValue, setInputValue] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const formRef = useRef<HTMLFormElement>(null);
+    const hasSubmitted = useRef(false);
 
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    };
-
-    useEffect(() => {
-        scrollToBottom();
-    }, [messages]);
-
-    const handleSendMessage = async (e: React.FormEvent) => {
+    const handleSendMessage = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
         if (!inputValue.trim() || isLoading) return;
 
@@ -40,7 +36,16 @@ const Chat: React.FC = () => {
 
         try {
             const response = await sendMessage(inputValue.trim());
-            setMessages(prev => [...prev, response]);
+            if (response.content.includes('error:')) {
+                // Extract error message
+                const errorMessage = response.content.split('error:')[1].trim();
+                setMessages(prev => [...prev, {
+                    ...response,
+                    content: `Error: ${errorMessage}`
+                }]);
+            } else {
+                setMessages(prev => [...prev, response]);
+            }
         } catch (error) {
             console.error('Error sending message:', error);
             setMessages(prev => [
@@ -55,7 +60,42 @@ const Chat: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
+    }, [inputValue, isLoading]);
+
+    useEffect(() => {
+        // Reset hasSubmitted when location changes
+        hasSubmitted.current = false;
+
+        const quickAction = location.state?.quickAction;
+        if (quickAction?.type === 'Data Analysis' && quickAction.data.message && !hasSubmitted.current) {
+            hasSubmitted.current = true;
+            const message = quickAction.data.message;
+            setInputValue(message);
+        }
+    }, [location.state]);
+
+    // Reset state when component unmounts or location changes
+    useEffect(() => {
+        return () => {
+            setInputValue('');
+            hasSubmitted.current = false;
+        };
+    }, [location.pathname]);
+
+    useEffect(() => {
+        const quickAction = location.state?.quickAction;
+        if (quickAction?.type === 'Data Analysis' && inputValue && formRef.current && !isLoading) {
+            formRef.current.dispatchEvent(new Event('submit', { cancelable: true }));
+        }
+    }, [inputValue, isLoading, location.state]);
+
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
+
+    useEffect(() => {
+        scrollToBottom();
+    }, [messages]);
 
     return (
         <div className="chat-container">
@@ -73,7 +113,7 @@ const Chat: React.FC = () => {
                 ))}
                 <div ref={messagesEndRef} />
             </div>
-            <form onSubmit={handleSendMessage} className="chat-input-form">
+            <form ref={formRef} onSubmit={handleSendMessage} className="chat-input-form">
                 <input
                     type="text"
                     value={inputValue}

@@ -1,42 +1,39 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Modal from '../Modal/Modal';
+import DataAnalysisModal from '../DataAnalysisModal/DataAnalysisModal';
 import './Sidebar.css';
 
 interface QuickAction {
     id: string;
     label: string;
-    prompt: string;
-    questions: { id: string; question: string }[];
+    type: 'data-analysis' | 'report';
 }
 
 const quickActions: QuickAction[] = [
     {
         id: '1',
         label: 'Data Analysis',
-        prompt: 'Analyze data for...',
-        questions: [
-            { id: 'q1', question: 'What type of data would you like to analyze?' },
-            { id: 'q2', question: 'What is the time period for analysis?' }
-        ]
+        type: 'data-analysis'
     },
     {
         id: '2',
         label: 'Generate Report',
-        prompt: 'Generate a report for...',
-        questions: [
-            { id: 'q1', question: 'What type of report do you need?' },
-            { id: 'q2', question: 'What should be included in the report?' }
-        ]
+        type: 'report'
     }
 ];
 
 const Sidebar: React.FC = () => {
     const navigate = useNavigate();
     const [selectedAction, setSelectedAction] = useState<QuickAction | null>(null);
+    const [showDataAnalysisModal, setShowDataAnalysisModal] = useState(false);
 
     const handleQuickAction = (action: QuickAction) => {
-        setSelectedAction(action);
+        if (action.type === 'data-analysis') {
+            setShowDataAnalysisModal(true);
+        } else {
+            setSelectedAction(action);
+        }
     };
 
     const handleModalSubmit = (answers: Record<string, string>) => {
@@ -45,6 +42,19 @@ const Sidebar: React.FC = () => {
                 quickAction: {
                     type: selectedAction?.label || '',
                     data: answers
+                }
+            }
+        });
+    };
+
+    const handleDataAnalysisSubmit = (s3Uri: string, flowUri: string) => {
+        navigate('/chat', {
+            state: {
+                quickAction: {
+                    type: 'Data Analysis',
+                    data: {
+                        message: `Create a data quality insight report using this S3 URI ${s3Uri} for data and S3 Flow URI ${flowUri} for the flow. This process can take some time.`
+                    }
                 }
             }
         });
@@ -75,15 +85,23 @@ const Sidebar: React.FC = () => {
                     </button>
                 ))}
             </div>
-            {selectedAction && (
+            {selectedAction && selectedAction.type === 'report' && (
                 <Modal
                     isOpen={true}
                     onClose={() => setSelectedAction(null)}
                     title={selectedAction.label}
-                    questions={selectedAction.questions}
+                    questions={[
+                        { id: 'q1', question: 'What type of report do you need?' },
+                        { id: 'q2', question: 'What should be included in the report?' }
+                    ]}
                     onSubmit={handleModalSubmit}
                 />
             )}
+            <DataAnalysisModal
+                isOpen={showDataAnalysisModal}
+                onClose={() => setShowDataAnalysisModal(false)}
+                onSubmit={handleDataAnalysisSubmit}
+            />
         </div>
     );
 };
