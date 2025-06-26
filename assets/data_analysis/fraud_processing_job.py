@@ -9,6 +9,28 @@ from datetime import datetime
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+# Initialize S3 client
+s3_client = boto3.client('s3')
+
+
+def read_report_json(s3_uri):
+    """
+    Read and parse a JSON report file from S3
+    """
+    try:
+        # Parse bucket and key from S3 URI
+        uri_parts = s3_uri.replace("s3://", "").split("/")
+        bucket = uri_parts[0]
+        key = "/".join(uri_parts[1:])
+
+        # Read JSON file from S3
+        response = s3_client.get_object(Bucket=bucket, Key=key)
+        json_content = response['Body'].read().decode('utf-8')
+        return json.loads(json_content)
+    except Exception as e:
+        logger.error(f"Error reading report JSON from S3: {str(e)}")
+        raise
+
 
 def process_fraud_detection(flow_s3_uri, transactions_s3_uri):
     """
@@ -128,7 +150,7 @@ def process_fraud_detection(flow_s3_uri, transactions_s3_uri):
 
         return {
             'jobName': processing_job_name,
-            'jobArn': 'temp',  # response['ProcessingJobArn'],
+            'jobArn': response['ProcessingJobArn'],
             'resultsPath': s3_job_results_path,
             'status': 'InProgress'
         }
@@ -140,7 +162,7 @@ def process_fraud_detection(flow_s3_uri, transactions_s3_uri):
 
 def lambda_handler(event, context):
     """
-    Lambda handler function for Bedrock agent action to start fraud processing job
+    Lambda handler function for Bedrock agent action to start fraud processing job or analyze report
     """
     try:
         # Log the full event for debugging
@@ -153,37 +175,64 @@ def lambda_handler(event, context):
 
         logger.info(f"Processing parameters: {parameters}")
 
-        # Extract S3 URIs from parameters array
-        flow_s3_uri = None
-        transactions_s3_uri = None
+        # Get function name from event
+        function = event.get('function', '')
+        logger.info(f"Function being called: {function}")
 
-        try:
+        # Handle different functions
+        if function == 'analyze_report':
+            # Extract report URI from parameters
+            report_uri = None
             for param in parameters:
-                if param.get('name') == 'flow_s3_uri':
-                    flow_s3_uri = param.get('value')
-                elif param.get('name') == 'transactions_s3_uri':
-                    transactions_s3_uri = param.get('value')
-        except (TypeError, AttributeError) as e:
-            logger.error(f"Error parsing parameters: {str(e)}")
-            raise ValueError("Invalid parameters format")
+                if param.get('name') == 'report_uri':
+                    report_uri = param.get('value')
+                    break
 
-        logger.info(
-            f"Extracted URIs - flow: {flow_s3_uri}, transactions: {transactions_s3_uri}")
+            if not report_uri:
+                raise ValueError(
+                    "report_uri parameter is required for analyze_report function")
 
-        if not flow_s3_uri or not transactions_s3_uri:
-            raise ValueError(
-                "flow_s3_uri and transactions_s3_uri are required parameters")
+            # Read and analyze the report
+            report_data = read_report_json(report_uri)
 
-        # Process fraud detection
-        result = process_fraud_detection(flow_s3_uri, transactions_s3_uri)
+            # Format response with report analysis
+            result = {
+                'reportUri': report_uri,
+                'data': report_data,
+                'status': 'Completed'
+            }
+        elif function == 'create_report':
+            # Handle report creation
+            flow_s3_uri = None
+            transactions_s3_uri = None
+
+            # Extract parameters for report creation
+            for param in parameters:
+                param_name = param.get('name')
+                param_value = param.get('value')
+
+                if param_name == 'flow_s3_uri':
+                    flow_s3_uri = param_value
+                elif param_name == 'transactions_s3_uri':
+                    transactions_s3_uri = param_value
+
+            logger.info(
+                f"Extracted URIs - flow: {flow_s3_uri}, transactions: {transactions_s3_uri}")
+
+            if not flow_s3_uri or not transactions_s3_uri:
+                raise ValueError(
+                    "flow_s3_uri and transactions_s3_uri are required parameters")
+
+            # Process fraud detection
+            result = process_fraud_detection(flow_s3_uri, transactions_s3_uri)
 
         # Add informative message to result
         result_with_message = {
             **result,
-            'message': 'Data quality insight job is now running. This process can take up to 2 hours to complete. You can check the job status using the provided jobName.'
+            'message': 'Analysis completed successfully.' if 'reportUri' in result else 'Data quality insight job is now running. This process can take up to 2 hours to complete. You can check the job status using the provided jobName.'
         }
 
-       # Format response to match Bedrock agent's expected schema
+        # Format response to match Bedrock agent's expected schema
         api_response = {
             'messageVersion': '1.0',
             'response': {
@@ -202,6 +251,7 @@ def lambda_handler(event, context):
             'promptSessionAttributes': event.get('promptSessionAttributes', {})
         }
 
+        logger.info(f"api response: {json.dumps(api_response, indent=2)}")
         return api_response
 
     except Exception as e:

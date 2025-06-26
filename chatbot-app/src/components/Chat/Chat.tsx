@@ -36,23 +36,26 @@ const Chat: React.FC = () => {
 
         try {
             const response = await sendMessage(inputValue.trim());
-            if (response.content.includes('error:')) {
-                // Extract error message
-                const errorMessage = response.content.split('error:')[1].trim();
+
+            // Check if response contains error message
+            if (response.content.toLowerCase().includes('error')) {
                 setMessages(prev => [...prev, {
                     ...response,
-                    content: `Error: ${errorMessage}`
+                    content: response.content.includes('Bedrock') ?
+                        response.content : // Keep the full message if it mentions Bedrock
+                        response.content + '\n\n: Please try again'
                 }]);
             } else {
                 setMessages(prev => [...prev, response]);
             }
         } catch (error) {
             console.error('Error sending message:', error);
+            const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
             setMessages(prev => [
                 ...prev,
                 {
                     id: Date.now().toString(),
-                    content: 'Sorry, there was an error processing your message.',
+                    content: `${errorMessage}\n\nPlease wait a few seconds and try again, as the Bedrock agent may need time to process.`,
                     sender: 'bot',
                     timestamp: new Date()
                 }
@@ -67,7 +70,7 @@ const Chat: React.FC = () => {
         hasSubmitted.current = false;
 
         const quickAction = location.state?.quickAction;
-        if (quickAction?.type === 'Data Analysis' && quickAction.data.message && !hasSubmitted.current) {
+        if (quickAction?.data?.message && !hasSubmitted.current) {
             hasSubmitted.current = true;
             const message = quickAction.data.message;
             setInputValue(message);
@@ -84,7 +87,7 @@ const Chat: React.FC = () => {
 
     useEffect(() => {
         const quickAction = location.state?.quickAction;
-        if (quickAction?.type === 'Data Analysis' && inputValue && formRef.current && !isLoading) {
+        if (quickAction?.data?.message && inputValue && formRef.current && !isLoading) {
             formRef.current.dispatchEvent(new Event('submit', { cancelable: true }));
         }
     }, [inputValue, isLoading, location.state]);

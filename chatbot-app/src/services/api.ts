@@ -13,6 +13,10 @@ interface FlowURIResponse {
     flows: string[];
 }
 
+interface ReportURIResponse {
+    reports: string[];
+}
+
 // Configuration for API endpoint
 const API_CONFIG = {
     CHAT_ENDPOINT: process.env.REACT_APP_API_GATEWAY_ENDPOINT || ''
@@ -60,6 +64,27 @@ export const listFlowURIs = async (): Promise<string[]> => {
     }
 };
 
+export const listReportURIs = async (): Promise<string[]> => {
+    try {
+        const response = await fetch(`${API_CONFIG.CHAT_ENDPOINT}/list-report-uri`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data: ReportURIResponse = await response.json();
+        return data.reports;
+    } catch (error) {
+        console.error('Error fetching Report URIs:', error);
+        return [];
+    }
+};
+
 export const sendMessage = async (message: string): Promise<ChatMessage> => {
     try {
         const response = await fetch(API_CONFIG.CHAT_ENDPOINT + '/chat', {
@@ -68,15 +93,33 @@ export const sendMessage = async (message: string): Promise<ChatMessage> => {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                message
+                message,
+                function: message.toLowerCase().includes('analyze') ? 'analyze_report' : 'create_report'
             })
         });
 
         const data = await response.json();
         if (!response.ok) {
-            const errorMessage = data?.response?.responseBody?.['application/json']?.body?.error || 
-                               data?.message || 
-                               `Failed to process request (Status: ${response.status})`;
+            // Extract error details from various possible response formats
+            let errorMessage = 'An error occurred';
+            
+            if (data?.response?.responseBody?.['application/json']?.body?.error) {
+                errorMessage = data.response.responseBody['application/json'].body.error;
+            } else if (data?.response?.responseBody?.TEXT?.body) {
+                try {
+                    const bodyJson = JSON.parse(data.response.responseBody.TEXT.body);
+                    errorMessage = bodyJson.error || bodyJson.message || errorMessage;
+                } catch (e) {
+                    errorMessage = data.response.responseBody.TEXT.body;
+                }
+            } else if (data?.message) {
+                errorMessage = data.message;
+            } else if (data?.error) {
+                errorMessage = data.error;
+            }
+
+            // Add status code to error message for debugging
+            errorMessage = `Error (${response.status}): ${errorMessage}`;
             throw new Error(errorMessage);
         }
         return {
@@ -89,7 +132,7 @@ export const sendMessage = async (message: string): Promise<ChatMessage> => {
         console.error('Error calling chat endpoint:', error);
         return {
             id: Date.now().toString(),
-            content: `error: ${error instanceof Error ? error.message : 'Failed to send message'}`,
+            content: `Error: ${error instanceof Error ? error.message : 'Failed to send message. Please try again in a few seconds as the Bedrock agent may need time to process.'}`,
             sender: 'bot',
             timestamp: new Date()
         };
