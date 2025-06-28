@@ -40,6 +40,46 @@
     word-wrap: break-word;
 }
 
+.message-content p {
+    margin: 0;
+}
+
+.message-content pre {
+    background-color: rgba(0, 0, 0, 0.1);
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+    overflow-x: auto;
+}
+
+.message-content code {
+    background-color: rgba(0, 0, 0, 0.1);
+    padding: 0.2rem 0.4rem;
+    border-radius: 0.25rem;
+    font-size: 0.9em;
+}
+
+.message-content ul,
+.message-content ol {
+    margin: 0.5rem 0;
+    padding-left: 1.5rem;
+}
+
+.message-content blockquote {
+    border-left: 3px solid #dee2e6;
+    margin: 0.5rem 0;
+    padding-left: 1rem;
+    color: #6c757d;
+}
+
+.bot-message .message-content a {
+    color: #0056b3;
+}
+
+.user-message .message-content a {
+    color: #ffffff;
+    text-decoration: underline;
+}
+
 .message-timestamp {
     font-size: 0.75rem;
     opacity: 0.7;
@@ -71,7 +111,12 @@
     border-radius: 0.5rem;
     font-size: 1rem;
     outline: none;
-    transition: border-color 0.2s;
+    transition: border-color 0.2s, height 0.2s;
+    resize: none;
+    max-height: 200px;
+    overflow-y: auto;
+    line-height: 1.5;
+    min-height: 42px;
 }
 
 .chat-input:focus {

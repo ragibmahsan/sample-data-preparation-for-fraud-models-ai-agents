@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { sendMessage } from '../../services/api';
+import ReactMarkdown from 'react-markdown';
 import './Chat.css';
 
 interface Message {
@@ -108,7 +109,9 @@ const Chat: React.FC = () => {
                         key={message.id}
                         className={`message ${message.sender === 'user' ? 'user-message' : 'bot-message'}`}
                     >
-                        <div className="message-content">{message.content}</div>
+                        <div className="message-content">
+                            <ReactMarkdown>{message.content}</ReactMarkdown>
+                        </div>
                         <div className="message-timestamp">
                             {message.timestamp.toLocaleTimeString()}
                         </div>
@@ -117,13 +120,24 @@ const Chat: React.FC = () => {
                 <div ref={messagesEndRef} />
             </div>
             <form ref={formRef} onSubmit={handleSendMessage} className="chat-input-form">
-                <input
-                    type="text"
+                <textarea
                     value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    placeholder="Type your message..."
+                    onChange={(e) => {
+                        setInputValue(e.target.value);
+                        // Auto-resize
+                        e.target.style.height = 'auto';
+                        e.target.style.height = `${e.target.scrollHeight}px`;
+                    }}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSendMessage(e);
+                        }
+                    }}
+                    placeholder="Type your message... (Shift + Enter for new line)"
                     className="chat-input"
                     disabled={isLoading}
+                    rows={1}
                 />
                 <button type="submit" className="send-button" disabled={isLoading}>
                     {isLoading ? 'Sending...' : 'Send'}
