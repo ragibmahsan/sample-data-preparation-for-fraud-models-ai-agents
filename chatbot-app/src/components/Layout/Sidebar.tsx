@@ -2,12 +2,13 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DataAnalysisModal from '../DataAnalysisModal/DataAnalysisModal';
 import AnalyzeReportModal from '../AnalyzeReportModal/AnalyzeReportModal';
+import DataTransformModal from '../DataTransformModal/DataTransformModal';
 import './Sidebar.css';
 
 interface QuickAction {
     id: string;
     label: string;
-    type: 'data-analysis' | 'analyze-report';
+    type: 'data-analysis' | 'analyze-report' | 'data-transform';
 }
 
 const quickActions: QuickAction[] = [
@@ -20,6 +21,11 @@ const quickActions: QuickAction[] = [
         id: '2',
         label: 'Analyze Report',
         type: 'analyze-report'
+    },
+    {
+        id: '3',
+        label: 'Transform Data',
+        type: 'data-transform'
     }
 ];
 
@@ -27,12 +33,15 @@ const Sidebar: React.FC = () => {
     const navigate = useNavigate();
     const [showDataAnalysisModal, setShowDataAnalysisModal] = useState(false);
     const [showAnalyzeReportModal, setShowAnalyzeReportModal] = useState(false);
+    const [showDataTransformModal, setShowDataTransformModal] = useState(false);
 
     const handleQuickAction = (action: QuickAction) => {
         if (action.type === 'data-analysis') {
             setShowDataAnalysisModal(true);
         } else if (action.type === 'analyze-report') {
             setShowAnalyzeReportModal(true);
+        } else if (action.type === 'data-transform') {
+            setShowDataTransformModal(true);
         }
     };
 
@@ -56,6 +65,19 @@ const Sidebar: React.FC = () => {
                     type: 'Analyze Report',
                     data: {
                         message: `Analyze the processor report from S3 URI ${reportUri}. Summarize the report and describe key details.`
+                    }
+                }
+            }
+        });
+    };
+
+    const handleDataTransformSubmit = (inputS3Uri: string, outputS3Path: string) => {
+        navigate('/chat', {
+            state: {
+                quickAction: {
+                    type: 'Transform Data',
+                    data: {
+                        message: `Transform the data from input S3 URI ${inputS3Uri} and save the results to the output S3 uri ${outputS3Path}.`
                     }
                 }
             }
@@ -96,6 +118,11 @@ const Sidebar: React.FC = () => {
                 isOpen={showAnalyzeReportModal}
                 onClose={() => setShowAnalyzeReportModal(false)}
                 onSubmit={handleAnalyzeReportSubmit}
+            />
+            <DataTransformModal
+                isOpen={showDataTransformModal}
+                onClose={() => setShowDataTransformModal(false)}
+                onSubmit={handleDataTransformSubmit}
             />
         </div>
     );
