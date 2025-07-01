@@ -3,6 +3,7 @@ interface ChatMessage {
     content: string;
     sender: 'user' | 'bot';
     timestamp: Date;
+    sessionId?: string;
 }
 
 interface S3URIResponse {
@@ -95,12 +96,15 @@ export const listReportURIs = async (): Promise<string[]> => {
 export const sendMessage = async (message: string): Promise<ChatMessage> => {
     try {
         const token = localStorage.getItem('auth_token') || undefined;
+        let sessionId = localStorage.getItem('bedrock_session_id');
+        
         const response = await fetch(API_CONFIG.CHAT_ENDPOINT + '/chat', {
             method: 'POST',
             headers: getHeaders(token),
             body: JSON.stringify({
                 message,
-                function: message.toLowerCase().includes('analyze') ? 'analyze_report' : 'create_report'
+                function: message.toLowerCase().includes('analyze') ? 'analyze_report' : 'create_report',
+                sessionId
             })
         });
 
@@ -128,11 +132,17 @@ export const sendMessage = async (message: string): Promise<ChatMessage> => {
             errorMessage = `Error (${response.status}): ${errorMessage}`;
             throw new Error(errorMessage);
         }
+        // Store the session ID from the response if it's the first message
+        if (data.sessionId && !sessionId) {
+            localStorage.setItem('bedrock_session_id', data.sessionId);
+        }
+
         return {
             id: Date.now().toString(),
             content: data.content,
             sender: 'bot',
-            timestamp: new Date()
+            timestamp: new Date(),
+            sessionId: data.sessionId || sessionId
         };
     } catch (error) {
         console.error('Error calling chat endpoint:', error);

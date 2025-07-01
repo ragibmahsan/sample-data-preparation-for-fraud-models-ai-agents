@@ -33,8 +33,11 @@ def lambda_handler(event, context):
 
         logger.info(f"Received event: {json.dumps(event)}")
 
-        # Extract session ID
-        session_id = context.aws_request_id
+        # Get session ID from request or create new one
+        body = json.loads(event['body'])
+        session_id = body.get('sessionId')
+        if not session_id:
+            session_id = context.aws_request_id
         logger.info(f"Session ID: {session_id}")
 
         # Extract Agent ID and Alias from environment variables
@@ -45,8 +48,7 @@ def lambda_handler(event, context):
             raise ValueError(
                 "Agent ID and Alias ID must be set in environment variables. Both should be set to 'X3SLAWXSRH'.")
 
-        # Parse request
-        body = json.loads(event['body'])
+        # Get message from request
         input_text = body.get('message', '').strip()
 
         if not input_text:
@@ -91,7 +93,8 @@ def lambda_handler(event, context):
                 "Access-Control-Allow-Headers": "Content-Type"
             },
             "body": json.dumps({
-                "content": final_answer
+                "content": final_answer,
+                "sessionId": session_id
             })
         }
 
