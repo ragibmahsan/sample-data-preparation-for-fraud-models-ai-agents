@@ -38,11 +38,11 @@ def process_fraud_detection(flow_s3_uri, transactions_s3_uri):
     """
     try:
         # Initialize clients
-        region = os.environ.get('AWS_REGION', 'us-east-2')
+        region = os.environ.get('AWS_REGION', 'us-east-1')
         sagemaker_client = boto3.client('sagemaker', region_name=region)
 
         # Get environment variables
-        bucket = os.environ.get('BUCKET_NAME', 'fraud-detection-ws')
+        bucket = os.environ.get('BUCKET_NAME')
         iam_role = os.environ.get('SAGEMAKER_ROLE_ARN')
         container_uri = os.environ.get('CONTAINER_URI')
 
@@ -51,7 +51,7 @@ def process_fraud_detection(flow_s3_uri, transactions_s3_uri):
         flow_export_id = f"{timestamp}-{str(uuid.uuid4())[:8]}"
 
         # Set up job configuration
-        output_name = "5e3f3288-9e31-4886-a304-3951c1f4e361.default"
+        output_name = "6a58f2fa-9d34-4a14-a92a-9c82468e8b47.default"
         s3_output_prefix = f"processor_output"
         s3_output_base_path = f"s3://{bucket}/{s3_output_prefix}"
 
@@ -201,7 +201,7 @@ def lambda_handler(event, context):
                 'data': report_data,
                 'status': 'Completed'
             }
-        elif function == 'create_report':
+        elif function == 'create_data_quality_insight':
             # Handle report creation
             flow_s3_uri = None
             transactions_s3_uri = None
