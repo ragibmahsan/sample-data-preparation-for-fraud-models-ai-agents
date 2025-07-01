@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { sendMessage } from '../../services/api';
+import { useAuth } from 'react-oidc-context';
 import ReactMarkdown from 'react-markdown';
 import './Chat.css';
 
@@ -13,6 +14,7 @@ interface Message {
 
 const Chat: React.FC = () => {
     const location = useLocation();
+    const auth = useAuth();
     const [messages, setMessages] = useState<Message[]>([]);
     const [inputValue, setInputValue] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -36,6 +38,11 @@ const Chat: React.FC = () => {
         setIsLoading(true);
 
         try {
+            // Store the access token in localStorage for API calls
+            if (auth.user?.access_token) {
+                localStorage.setItem('auth_token', auth.user.access_token);
+            }
+
             const response = await sendMessage(inputValue.trim());
 
             // Check if response contains error message

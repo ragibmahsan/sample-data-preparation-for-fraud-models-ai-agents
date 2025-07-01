@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from "react-oidc-context";
 import DataAnalysisModal from '../DataAnalysisModal/DataAnalysisModal';
 import AnalyzeReportModal from '../AnalyzeReportModal/AnalyzeReportModal';
 import DataTransformModal from '../DataTransformModal/DataTransformModal';
@@ -31,6 +32,16 @@ const quickActions: QuickAction[] = [
 
 const Sidebar: React.FC = () => {
     const navigate = useNavigate();
+
+    const auth = useAuth();
+
+    const handleSignOut = async () => {
+        await auth.removeUser();
+        const clientId = process.env.REACT_APP_COGNITO_CLIENT_ID;
+        const logoutUri = process.env.REACT_APP_LOGOUT_URI || "http://localhost:3000/";
+        const cognitoDomain = process.env.REACT_APP_COGNITO_DOMAIN;
+        window.location.href = `${cognitoDomain}/logout?client_id=${clientId}&logout_uri=${encodeURIComponent(logoutUri)}`;
+    };
     const [showDataAnalysisModal, setShowDataAnalysisModal] = useState(false);
     const [showAnalyzeReportModal, setShowAnalyzeReportModal] = useState(false);
     const [showDataTransformModal, setShowDataTransformModal] = useState(false);
@@ -124,6 +135,9 @@ const Sidebar: React.FC = () => {
                 onClose={() => setShowDataTransformModal(false)}
                 onSubmit={handleDataTransformSubmit}
             />
+            <button onClick={handleSignOut} className="sign-out-button">
+                Sign Out
+            </button>
         </div>
     );
 };

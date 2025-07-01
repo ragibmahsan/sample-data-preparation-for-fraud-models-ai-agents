@@ -6,10 +6,85 @@ import * as path from 'path';
 import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as bedrock from 'aws-cdk-lib/aws-bedrock';
 import * as kendra from 'aws-cdk-lib/aws-kendra';
+import * as cognito from 'aws-cdk-lib/aws-cognito';
+import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 
 export class BackendStack extends cdk.Stack {
+  public readonly userPool: cognito.UserPool;
+  public readonly userPoolClient: cognito.UserPoolClient;
+  public readonly api: apigateway.RestApi;
+
   constructor(scope: cdk.App, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
+
+    // Create Cognito User Pool
+    this.userPool = new cognito.UserPool(this, 'ChatbotUserPool', {
+      userPoolName: 'chatbot-user-pool',
+      selfSignUpEnabled: true,
+      signInAliases: {
+        email: true
+      },
+      standardAttributes: {
+        email: {
+          required: true,
+          mutable: true
+        }
+      },
+      passwordPolicy: {
+        minLength: 8,
+        requireLowercase: true,
+        requireUppercase: true,
+        requireDigits: true,
+        requireSymbols: true
+      }
+    });
+
+    // Add Cognito Domain
+    const domain = this.userPool.addDomain('ChatbotDomain', {
+      cognitoDomain: {
+        domainPrefix: 'chatbot-fraud-detection'
+      }
+    });
+
+    // Create User Pool Client
+    this.userPoolClient = this.userPool.addClient('ChatbotUserPoolClient', {
+      userPoolClientName: 'chatbot-app-client',
+      authFlows: {
+        userPassword: true,
+        userSrp: true
+      },
+      oAuth: {
+        flows: {
+          implicitCodeGrant: true
+        },
+        callbackUrls: [
+          'http://localhost:3000/callback'
+        ],
+        logoutUrls: [
+          'http://localhost:3000/login'
+        ],
+        scopes: [
+          cognito.OAuthScope.EMAIL,
+          cognito.OAuthScope.OPENID,
+          cognito.OAuthScope.PROFILE
+        ]
+      }
+    });
+
+    // Create API Gateway with Cognito Authorizer
+    this.api = new apigateway.RestApi(this, 'ChatbotApi', {
+      restApiName: 'Chatbot API',
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
+        allowMethods: apigateway.Cors.ALL_METHODS,
+        allowHeaders: apigateway.Cors.DEFAULT_HEADERS
+      }
+    });
+
+    // Create Cognito Authorizer
+    const auth = new apigateway.CognitoUserPoolsAuthorizer(this, 'ChatbotAuthorizer', {
+      cognitoUserPools: [this.userPool]
+    });
 
     // Fraud Transform Lambda Role
     const fraudTransformLambdaRole = new iam.Role(this, 'FraudTransformLambdaRole', {
@@ -53,6 +128,13 @@ export class BackendStack extends cdk.Stack {
       memorySize: 10240,
       ephemeralStorageSize: cdk.Size.gibibytes(10), // Set the ephemeral storage size to 10240MB
       timeout: cdk.Duration.minutes(5).plus(cdk.Duration.seconds(3)) // Set the timeout to 5 minutes and 3 seconds
+    });
+
+    // Add authorizer to API Gateway
+    const chatEndpoint = this.api.root.addResource('chat');
+    chatEndpoint.addMethod('POST', new apigateway.LambdaIntegration(TransformFunction), {
+      authorizer: auth,
+      authorizationType: apigateway.AuthorizationType.COGNITO
     });
 
     // Bedrock Agent Role

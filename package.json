@@ -1,6 +1,15 @@
 {
-  "dependencies": {
-    "@aws-amplify/ui-react": "^6.11.2",
-    "aws-amplify": "^6.15.1"
-  }
+    "name": "fraud-detection-auth",
+    "version": "1.0.0",
+    "description": "Fraud Detection System Authentication",
+    "main": "app.js",
+    "scripts": {
+        "start": "node app.js"
+    },
+    "dependencies": {
+        "ejs": "^3.1.10",
+        "express": "^4.21.1",
+        "express-session": "^1.18.1",
+        "openid-client": "^5.7.0"
+    }
 }

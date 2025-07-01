@@ -22,13 +22,24 @@ const API_CONFIG = {
     CHAT_ENDPOINT: process.env.REACT_APP_API_GATEWAY_ENDPOINT || ''
 };
 
+// Helper to get headers with auth token
+const getHeaders = (accessToken?: string) => {
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+    };
+    
+    if (accessToken) {
+        headers['Authorization'] = accessToken;
+    }
+    
+    return headers;
+};
+
 export const listS3URIs = async (): Promise<string[]> => {
     try {
         const response = await fetch(`${API_CONFIG.CHAT_ENDPOINT}/list-s3-uri`, {
             method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-            }
+            headers: getHeaders()
         });
 
         if (!response.ok) {
@@ -47,9 +58,7 @@ export const listFlowURIs = async (): Promise<string[]> => {
     try {
         const response = await fetch(`${API_CONFIG.CHAT_ENDPOINT}/list-flow-uri`, {
             method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-            }
+            headers: getHeaders()
         });
 
         if (!response.ok) {
@@ -68,9 +77,7 @@ export const listReportURIs = async (): Promise<string[]> => {
     try {
         const response = await fetch(`${API_CONFIG.CHAT_ENDPOINT}/list-report-uri`, {
             method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-            }
+            headers: getHeaders()
         });
 
         if (!response.ok) {
@@ -87,11 +94,10 @@ export const listReportURIs = async (): Promise<string[]> => {
 
 export const sendMessage = async (message: string): Promise<ChatMessage> => {
     try {
+        const token = localStorage.getItem('auth_token') || undefined;
         const response = await fetch(API_CONFIG.CHAT_ENDPOINT + '/chat', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: getHeaders(token),
             body: JSON.stringify({
                 message,
                 function: message.toLowerCase().includes('analyze') ? 'analyze_report' : 'create_report'
