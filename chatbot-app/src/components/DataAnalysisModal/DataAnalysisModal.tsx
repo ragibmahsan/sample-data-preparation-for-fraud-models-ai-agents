@@ -13,7 +13,6 @@ const DataAnalysisModal: React.FC<DataAnalysisModalProps> = ({ isOpen, onClose, 
     const [flowURIs, setFlowURIs] = useState<string[]>([]);
     const [selectedS3URI, setSelectedS3URI] = useState<string>('');
     const [selectedFlowURI, setSelectedFlowURI] = useState<string>('');
-    const [outputPath, setOutputPath] = useState<string>('data_flow.flow');
     const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
@@ -96,16 +95,6 @@ const DataAnalysisModal: React.FC<DataAnalysisModalProps> = ({ isOpen, onClose, 
                                     </option>
                                 ))}
                             </select>
-                        </div>
-                        <div className="form-group">
-                            <label htmlFor="output-path">Output S3 Path:</label>
-                            <input
-                                id="output-path"
-                                type="text"
-                                value={outputPath}
-                                onChange={(e) => setOutputPath(e.target.value)}
-                                placeholder="s3://bucket/output/path/"
-                            />
                         </div>
                         <div className="modal-actions">
                             <button type="button" onClick={onClose}>

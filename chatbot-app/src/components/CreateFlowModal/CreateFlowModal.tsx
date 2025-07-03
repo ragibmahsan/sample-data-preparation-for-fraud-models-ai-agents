@@ -11,7 +11,6 @@ interface CreateFlowModalProps {
 const CreateFlowModal: React.FC<CreateFlowModalProps> = ({ isOpen, onClose, onCreateFlow }) => {
     const [s3URIs, setS3URIs] = useState<string[]>([]);
     const [selectedS3URI, setSelectedS3URI] = useState<string>('');
-    const [outputPath, setOutputPath] = useState<string>('data_flow.flow');
     const [targetColumn, setTargetColumn] = useState<string>('');
     const [problemType, setProblemType] = useState<'Classification' | 'Regression'>('Classification');
     const [isLoading, setIsLoading] = useState(false);
@@ -47,7 +46,7 @@ const CreateFlowModal: React.FC<CreateFlowModalProps> = ({ isOpen, onClose, onCr
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (selectedS3URI) {
-            const text = `create flow from data in S3 uri ${selectedS3URI}, make the flow output to output_s3_path ${outputPath}, for target column ${targetColumn} and problem type ${problemType}`;
+            const text = `create flow from data in S3 uri ${selectedS3URI}, for target column ${targetColumn} and problem type ${problemType}`;
             onCreateFlow(text);
             onClose();
         }
@@ -77,16 +76,6 @@ const CreateFlowModal: React.FC<CreateFlowModalProps> = ({ isOpen, onClose, onCr
                                     </option>
                                 ))}
                             </select>
-                        </div>
-                        <div className="form-group">
-                            <label htmlFor="output-path">Output S3 Path:</label>
-                            <input
-                                id="output-path"
-                                type="text"
-                                value={outputPath}
-                                onChange={(e) => setOutputPath(e.target.value)}
-                                placeholder="s3://bucket/output/path/"
-                            />
                         </div>
                         <div className="form-group">
                             <label htmlFor="target-column">Target Column:</label>

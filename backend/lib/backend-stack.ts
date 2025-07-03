@@ -353,7 +353,7 @@ export class BackendStack extends cdk.Stack {
       agentName: 'DataAnalysisAgent',
       description: 'Agent for data analysis and processing',
       foundationModel: foundationModel,
-      instruction: `You are an expert data scientist specializing in data quality analysis, feature engineering, and ML model development. Your role is to assist users with data analysis, quality assessment, and model improvement through advanced statistical techniques and machine learning best practices. You collaborate with the Supervisor Agent to ensure coordinated execution of complex workflows.`,
+        instruction: `You are an expert data scientist specializing in data quality analysis, feature engineering, and ML model development. Your role is to assist users with data analysis, quality assessment, and model improvement through advanced statistical techniques and machine learning best practices. You have deep expertise in analyzing data distributions, identifying quality issues, detecting outliers, and providing actionable recommendations for data cleaning and preprocessing. In feature engineering, you excel at suggesting relevant transformations, handling categorical variables, and implementing dimensionality reduction techniques while considering computational efficiency. You utilize statistical analysis tools to perform correlation analysis, hypothesis testing, and anomaly detection, always providing quantitative metrics and confidence measures to support your findings. When responding to queries, you maintain a professional, technical tone and structure your answers to include: (1) a clear understanding of the problem, (2) detailed analysis with supporting statistics, (3) actionable recommendations with implementation guidance, and (4) potential limitations or risks to consider. You have access to specialized tools for generating comprehensive data quality reports, providing feature engineering advice, and conducting statistical analyses. When analyzing data quality, you focus on completeness, accuracy, and consistency metrics, suggesting specific improvements and monitoring strategies. For feature engineering tasks, you consider domain knowledge, business context, and the potential impact on model performance while providing practical implementation details. Your responses should always be precise, technically accurate, and include specific examples or metrics when applicable. You should ask clarifying questions when needed to ensure your recommendations are properly tailored to the user's specific use case and data context. You specialize in fraud detection scenarios and can provide specific insights related to transaction data analysis, pattern recognition, and anomaly detection in financial datasets.`,
       idleSessionTtlInSeconds: 300,
       agentResourceRoleArn: bedrockDataAnalysisAgentRole.roleArn,
       actionGroups: [{
@@ -409,15 +409,11 @@ export class BackendStack extends cdk.Stack {
                     "content": {
                       "application/json": {
                           "schema": {
-                            "required": ["input_s3_uri", "output_s3_path", "target_column", "problem_type"],
+                            "required": ["input_s3_uri", "target_column", "problem_type"],
                             "properties": {
                               "input_s3_uri": {
                                 "type": "string",
                                 "description": "S3 URI of the input data file"
-                              },
-                              "output_s3_path": {
-                                "type": "string",
-                                "description": "Output path for the flow file"
                               },
                               "target_column": {
                                 "type": "string",
@@ -577,104 +573,15 @@ export class BackendStack extends cdk.Stack {
       description: 'Supervisor agent for orchestrating data analysis',
       foundationModel: foundationModel,
       agentCollaboration: 'SUPERVISOR',
-      instruction: `You are a supervisor agent responsible for coordinating data analysis tasks. You work with the Data Analysis Agent to ensure proper execution of data processing and analysis workflows.`,
+        instruction: `Primary Role: Orchestrate and coordinate multiple AI/ML agents specializing in fraud detection, while leveraging a comprehensive knowledge base of GitHub-sourced fraud detection algorithms. Key Responsibilities: 1. Manage and delegate tasks to specialized fraud detection sub-agents 2. Query and interpret the GitHub knowledge base for relevant fraud detection algorithms 3. Synthesize insights from multiple sources to enhance fraud detection capabilities 4. Adapt and optimize fraud detection strategies based on new information and evolving threats Knowledge Base: - Connected to a curated collection of GitHub repositories containing examples and implementations of fraud detection AI/ML algorithms - Regularly updated to include the latest advancements in fraud detection techniques Capabilities: 1. Natural Language Processing: Interpret user queries and translate them into actionable tasks for sub-agents 2. Algorithm Selection: Identify and recommend the most suitable fraud detection algorithms based on specific use cases 3. Data Analysis: Coordinate the analysis of large datasets to identify potential fraudulent activities 4. Machine Learning Integration: Facilitate the integration of machine learning models into existing fraud detection systems 5. Performance Monitoring: Track and report on the effectiveness of deployed fraud detection strategies Interaction Style: - Professional and security-focused - Provides clear, concise explanations of complex fraud detection concepts - Offers actionable recommendations based on the latest industry best practices Security Protocols: - Adheres to strict data privacy and security standards - Ensures all communications and data transfers are encrypted - Maintains detailed logs of all actions for auditing purposes Continuous Learning: - Regularly updates its knowledge base with new fraud detection techniques and algorithms - Analyzes patterns in fraudulent activities to proactively develop new detection methods Output Format: - Delivers results in structured reports, including visualizations when appropriate - Provides code snippets and implementation guidelines for recommended algorithms Primary Role: Orchestrate and coordinate multiple AI/ML agents specializing in fraud detection and data science, while leveraging a comprehensive knowledge base of GitHub-sourced algorithms and best practices. Key Responsibilities: 1. Manage and delegate tasks to specialized fraud detection sub-agents 2. Query and interpret the GitHub knowledge base for relevant algorithms and techniques 3. Synthesize insights from multiple sources to enhance fraud detection capabilities 4. Adapt and optimize strategies based on new information and evolving requirements 5. Provide expert guidance on data science concepts, methodologies, and best practices 6. Answer general data science questions across various domains Knowledge Base: - Connected to a curated collection of GitHub repositories containing: * Fraud detection AI/ML algorithms * Data science tutorials and examples * Statistical analysis methods * Machine learning implementations * Data visualization techniques - Regularly updated with latest advancements in both fraud detection and data science Capabilities: 1. Natural Language Processing: Interpret user queries and translate them into actionable tasks 2. Algorithm Selection: Recommend suitable algorithms for specific use cases 3. Data Analysis: Coordinate and explain analysis of large datasets 4. Machine Learning Integration: Guide the integration of ML models 5. Performance Monitoring: Track and report on effectiveness of deployed strategies 6. Data Science Education: Explain complex concepts in clear, understandable terms 7. Statistical Analysis: Provide guidance on statistical methods and their applications 8. Data Visualization: Recommend appropriate visualization techniques for different data types Educational Support: - Explain fundamental data science concepts - Provide examples and use cases - Guide users through statistical analysis methods - Share best practices for data preprocessing and feature engineering - Recommend learning resources and tutorials Interaction Style: - Professional and educational - Provides clear, concise explanations of complex concepts - Offers practical examples and real-world applications - Adapts explanations to user's level of expertise - Encourages learning and exploration Security Protocols: - Adheres to strict data privacy and security standards - Ensures all communications and data transfers are encrypted - Maintains detailed logs of all actions for auditing purposes Continuous Learning: - Updates knowledge base with new techniques and methodologies - Analyzes patterns to develop new approaches - Stays current with latest developments in data science and ML Output Format: - Structured reports with visualizations when appropriate - Code snippets and implementation guidelines - Educational explanations with examples - Step-by-step tutorials when needed - References to additional learning resources This context enables your Bedrock agent to serve as both a fraud detection orchestrator and a data science educator, providing valuable insights and guidance across both domains.`,
       idleSessionTtlInSeconds: 300,
       agentResourceRoleArn: bedrockSupervisorAgentRole.roleArn,
       agentCollaborators: [{
         agentDescriptor: {
               aliasArn: dataAnalysisAgentAlias.attrAgentAliasArn
         },
-        collaborationInstruction: `Collaborate with the Data Analysis Agent for specialized tasks including:
-                                    - Data quality analysis and validation
-                                    - Feature engineering and preprocessing
-                                    - Model development and optimization
-                                    - Statistical analysis and insights
-                                    - Performance monitoring and improvement`,
+        collaborationInstruction: `You are a specialized Fraud Data Analysis Agent with two primary functions. Your responsibilities are: 1. Function: create_data_quality_insight_report Input: - s3_uri: Data location - flow_uri: Flow configuration Actions: - Generate comprehensive data quality report - Assess data completeness - Validate data formats - Check for anomalies - Create quality metrics 2. Function: analyze_report Input: - report_uri: Location of processor report Actions: - Analyze fraud patterns - Extract key insights - Summarize findings - Provide recommendations 3. Collaboration Rules: - Coordinate with Transform Agent for data preparation - Request transformations when needed - Share analysis results clearly 4. Response Format: - Structured reports with sections - Clear metrics and findings - Actionable insights - Visual representations when applicable`,
         collaboratorName: 'DataAnalysisAgent'
-      }],
-      actionGroups: [{
-        actionGroupName: 'flow_creation_actions',
-        description: 'Create a fraud detection flow',
-        actionGroupExecutor: {
-          lambda: createFlowFunction.functionArn
-        },
-        apiSchema: {
-          payload: `{
-            "openapi": "3.0.0",
-            "info": {
-              "title": "Fraud_Detection_Flow_API",
-              "version": "1.0.0"
-            },
-            "paths": {
-              "/create_flow": {
-                "post": {
-                  "operationId": "create_flow",
-                  "description": "Create a new fraud detection flow",
-                  "responses": {
-                    "200": {
-                      "description": "Flow created successfully",
-                      "content": {
-                        "application/json": {
-                          "schema": {
-                            "type": "object",
-                            "properties": {
-                              "flow_name": {
-                                "type": "string",
-                                "description": "Name of the created flow"
-                              },
-                              "s3_uri": {
-                                "type": "string",
-                                "description": "S3 URI of the created flow"
-                              },
-                              "status": {
-                                "type": "string",
-                                "description": "Status of the flow creation"
-                              },
-                              "message": {
-                                "type": "string",
-                                "description": "Result message"
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  },
-                  "requestBody": {
-                    "required": true,
-                    "content": {
-                      "application/json": {
-                          "schema": {
-                            "type": "object",
-                            "required": ["input_s3_uri", "output_s3_path", "target_column", "problem_type"],
-                            "properties": {
-                              "input_s3_uri": {
-                                "type": "string",
-                                "description": "S3 URI of the input data file"
-                              },
-                              "output_s3_path": {
-                                "type": "string",
-                                "description": "Output path for the flow file"
-                              },
-                              "target_column": {
-                                "type": "string",
-                                "description": "Name of the target column for prediction"
-                              },
-                              "problem_type": {
-                                "type": "string",
-                                "enum": ["Classification", "Regression"],
-                                "description": "Type of machine learning problem"
-                              }
-                            }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }`
-        }
       }]
     });
 
@@ -756,6 +663,173 @@ export class BackendStack extends cdk.Stack {
     });
 
     this.api.deploymentStage = stage;
+
+    //Ahsan Code
+    // // Fraud Transform Lambda Role
+    // const fraudTransformLambdaRole = new iam.Role(this, 'FraudTransformLambdaRole', {
+    //     assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+    //     roleName: 'fraud-transform-lambda-role',
+    //     managedPolicies: [
+    //         iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole')
+    //     ],
+    //     inlinePolicies: {
+    //         S3AccessPolicy: new iam.PolicyDocument({
+    //             statements: [
+    //                 new iam.PolicyStatement({
+    //                     effect: iam.Effect.ALLOW,
+    //                     actions: [
+    //                         's3:GetObject',
+    //                         's3:PutObject',
+    //                         's3:ListBucket'
+    //                     ],
+    //                     resources: [
+    //                         'arn:aws:s3:::*/*',
+    //                         'arn:aws:s3:::*'
+    //                     ]
+    //                 })
+    //             ]
+    //         })
+    //     }
+    // });
+
+    // const TransformFunction = new lambda.Function(this, 'TransformFunction', {
+    //     functionName: "fraud-data-transformer",
+    //     description: "Transform Lambda Function",
+    //     handler: "lambda_function.lambda_handler",
+    //     runtime: lambda.Runtime.PYTHON_3_12,
+    //     code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/transform')),
+    //     layers: [
+    //         new lambda.LayerVersion(this, 'pandas', {
+    //             code: lambda.Code.fromAsset(path.join(__dirname, '../lib/layers/pandas-layer-95082f06-6857-4dd1-9ed4-9e11b42f7f69.zip')),
+    //         })
+    //     ],
+    //     role: fraudTransformLambdaRole,
+    //     memorySize: 10240,
+    //     ephemeralStorageSize: cdk.Size.gibibytes(10), // Set the ephemeral storage size to 10240MB
+    //     timeout: cdk.Duration.minutes(5).plus(cdk.Duration.seconds(3)) // Set the timeout to 5 minutes and 3 seconds
+    // });
+
+    // // Bedrock Agent Role
+    // const bedrockAgentRole = new iam.Role(this, 'BedrockAgentRole', {
+    //     assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com'),
+    //     managedPolicies: [
+    //         iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonBedrockFullAccess')
+    //     ]
+    // });
+
+    // bedrockAgentRole.addToPolicy(
+    //     new iam.PolicyStatement({
+    //         effect: iam.Effect.ALLOW,
+    //         actions: ['lambda:InvokeFunction'],
+    //         resources: [TransformFunction.functionArn]
+    //     })
+    // );
+
+    // // Bedrock Agent
+    // const fraudDataTransformerAgent = new bedrock.CfnAgent(this, 'FraudDataTransformerAgent', {
+    //     agentName: 'FraudDataTransformer',
+    //     agentResourceRoleArn: bedrockAgentRole.roleArn,
+    //     foundationModel: 'anthropic.claude-3-sonnet-20240229-v1:0',
+    //     instruction: 'You are a fraud data transformation agent that helps process and transform fraud detection data.',
+    //     actionGroups: [{
+    //         actionGroupName: 'TransformActionGroup',
+    //         actionGroupExecutor: {
+    //             lambda: TransformFunction.functionArn
+    //         },
+    //         apiSchema: {
+    //             payload: JSON.stringify({
+    //                 openapi: '3.0.0',
+    //                 info: {
+    //                     title: 'Fraud Data Transformer API',
+    //                     version: '1.0.0'
+    //                 },
+    //                 paths: {
+    //                     '/transform': {
+    //                         post: {
+    //                             summary: 'Transform fraud data',
+    //                             operationId: 'transformData',
+    //                             requestBody: {
+    //                                 required: true,
+    //                                 content: {
+    //                                     'application/json': {
+    //                                         schema: {
+    //                                             type: 'object',
+    //                                             properties: {
+    //                                                 data: {
+    //                                                     type: 'string',
+    //                                                     description: 'Input data to transform'
+    //                                                 }
+    //                                             },
+    //                                             required: ['data']
+    //                                         }
+    //                                     }
+    //                                 }
+    //                             },
+    //                             responses: {
+    //                                 '200': {
+    //                                     description: 'Successful transformation',
+    //                                     content: {
+    //                                         'application/json': {
+    //                                             schema: {
+    //                                                 type: 'object',
+    //                                                 properties: {
+    //                                                     transformedData: {
+    //                                                         type: 'string',
+    //                                                         description: 'Transformed data result'
+    //                                                     }
+    //                                                 }
+    //                                             }
+    //                                         }
+    //                                     }
+    //                                 }
+    //                             }
+    //                         }
+    //                     }
+    //                 }
+    //             })
+    //         }
+    //     }]
+    // });
+
+    // // Grant Lambda permission to be invoked by Bedrock
+    // TransformFunction.addPermission('BedrockInvokePermission', {
+    //     principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
+    //     action: 'lambda:InvokeFunction',
+    //     sourceArn: `arn:aws:bedrock:${this.region}:${this.account}:agent/${fraudDataTransformerAgent.attrAgentId}`
+    // });
+
+    // // Kendra Index Role
+    // const kendraIndexRole = new iam.Role(this, 'KendraIndexRole', {
+    //     assumedBy: new iam.ServicePrincipal('kendra.amazonaws.com'),
+    //     managedPolicies: [
+    //         iam.ManagedPolicy.fromAwsManagedPolicyName('CloudWatchLogsFullAccess')
+    //     ]
+    // });
+
+    // // Kendra Data Source Role
+    // const kendraDataSourceRole = new iam.Role(this, 'KendraDataSourceRole', {
+    //     assumedBy: new iam.ServicePrincipal('kendra.amazonaws.com'),
+    //     managedPolicies: [
+    //         iam.ManagedPolicy.fromAwsManagedPolicyName('CloudWatchLogsFullAccess')
+    //     ]
+    // });
+
+    // // Kendra Index
+    // const fraudGithubIndex = new kendra.CfnIndex(this, 'FraudGithubIndex', {
+    //     name: 'fraudgithubindex',
+    //     edition: 'DEVELOPER_EDITION',
+    //     roleArn: kendraIndexRole.roleArn
+    // });
+
+    // // GitHub Data Source (Note: Full GitHub configuration may need to be done via AWS Console)
+    // const githubDataSource = new kendra.CfnDataSource(this, 'GitHubDataSource', {
+    //     indexId: fraudGithubIndex.attrId,
+    //     name: 'GitHubSource',
+    //     type: 'GITHUB',
+    //     roleArn: kendraDataSourceRole.roleArn,
+    //     schedule: 'cron(0 0 ? * SUN *)'
+    // });
+
 
     // CDK Outputs
     new CfnOutput(this, 'UserPoolId', {

@@ -78,7 +78,7 @@ def parse_s3_uri(s3_uri):
     return bucket, key
 
 
-def generate_flow(dataset_s3_uri, output_s3_path, target_column, problem_type):
+def generate_flow(dataset_s3_uri, target_column, problem_type):
     source_id = "35160a5f-41b4-4b77-83f4-6330bd39f912"
     transform_id = "df6590b9-209e-4019-a568-cc633f41b402"
     report_id = "6a58f2fa-9d34-4a14-a92a-9c82468e8b47"
@@ -174,11 +174,7 @@ def generate_flow(dataset_s3_uri, output_s3_path, target_column, problem_type):
                         },
                     "full_data": "true",
                     "instance_type": INSTANCE_TYPE,
-                    "number_of_instances": 2,
-                    "output_config": {
-                            "output_path": output_s3_path,
-                            "output_content_type": "JSON"
-                    }
+                    "number_of_instances": 2
                 },
                 "inputs": [
                     {
@@ -229,7 +225,6 @@ def lambda_handler(event, context):
 
         # Extract parameters from properties
         dataset_uri = None
-        output_uri = None
         target_column = None
         problem_type = None
 
@@ -239,8 +234,6 @@ def lambda_handler(event, context):
 
             if prop_name == 'input_s3_uri':
                 dataset_uri = prop_value
-            elif prop_name == 'output_s3_path':
-                output_uri = prop_value
             elif prop_name == 'target_column':
                 target_column = prop_value
             elif prop_name == 'problem_type':
@@ -261,7 +254,7 @@ def lambda_handler(event, context):
 
         # Generate flow JSON
         flow_json = generate_flow(
-            dataset_uri, output_uri, target_column, problem_type)
+            dataset_uri, target_column, problem_type)
 
         # Upload to S3
         flow_str = json.dumps(flow_json, indent=2)
