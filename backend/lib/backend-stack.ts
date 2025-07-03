@@ -663,156 +663,278 @@ export class BackendStack extends cdk.Stack {
     });
 
     this.api.deploymentStage = stage;
+    
 
-    //Ahsan Code
-    // // Fraud Transform Lambda Role
-    // const fraudTransformLambdaRole = new iam.Role(this, 'FraudTransformLambdaRole', {
-    //     assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
-    //     roleName: 'fraud-transform-lambda-role',
-    //     managedPolicies: [
-    //         iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole')
-    //     ],
-    //     inlinePolicies: {
-    //         S3AccessPolicy: new iam.PolicyDocument({
-    //             statements: [
-    //                 new iam.PolicyStatement({
-    //                     effect: iam.Effect.ALLOW,
-    //                     actions: [
-    //                         's3:GetObject',
-    //                         's3:PutObject',
-    //                         's3:ListBucket'
-    //                     ],
-    //                     resources: [
-    //                         'arn:aws:s3:::*/*',
-    //                         'arn:aws:s3:::*'
-    //                     ]
-    //                 })
-    //             ]
-    //         })
-    //     }
-    // });
+    ////Ahsan stuff
+  // Fraud Transform Lambda Role
 
-    // const TransformFunction = new lambda.Function(this, 'TransformFunction', {
-    //     functionName: "fraud-data-transformer",
-    //     description: "Transform Lambda Function",
-    //     handler: "lambda_function.lambda_handler",
-    //     runtime: lambda.Runtime.PYTHON_3_12,
-    //     code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/transform')),
-    //     layers: [
-    //         new lambda.LayerVersion(this, 'pandas', {
-    //             code: lambda.Code.fromAsset(path.join(__dirname, '../lib/layers/pandas-layer-95082f06-6857-4dd1-9ed4-9e11b42f7f69.zip')),
-    //         })
-    //     ],
-    //     role: fraudTransformLambdaRole,
-    //     memorySize: 10240,
-    //     ephemeralStorageSize: cdk.Size.gibibytes(10), // Set the ephemeral storage size to 10240MB
-    //     timeout: cdk.Duration.minutes(5).plus(cdk.Duration.seconds(3)) // Set the timeout to 5 minutes and 3 seconds
-    // });
+    const fraudTransformLambdaRole = new iam.Role(this, 'FraudTransformLambdaRole', {
+        assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+        roleName: 'fraud-transform-lambda-role',
+        managedPolicies: [
+            iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
+            iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonS3FullAccess')
+        ]
+    });
 
-    // // Bedrock Agent Role
-    // const bedrockAgentRole = new iam.Role(this, 'BedrockAgentRole', {
-    //     assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com'),
-    //     managedPolicies: [
-    //         iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonBedrockFullAccess')
-    //     ]
-    // });
+    // Shared pandas layer
+    const pandasLayer = new lambda.LayerVersion(this, 'PandasLayer', {
+        code: lambda.Code.fromAsset(path.join(__dirname, '../lib/layers/pandas-layer-95082f06-6857-4dd1-9ed4-9e11b42f7f69.zip'))
+    });
 
-    // bedrockAgentRole.addToPolicy(
+    //drop_columns function
+    const dropcolumnsfunction = new lambda.Function(this, 'DropColumnsFunction', {
+        functionName: "drop_columns",
+        description: "Drop Columns Lambda Function",
+        handler: "lambda_function.lambda_handler",
+        runtime: lambda.Runtime.PYTHON_3_12,
+        code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/transform/drop')),
+        layers: [pandasLayer],
+        role: fraudTransformLambdaRole,
+        memorySize: 10240,
+        ephemeralStorageSize: cdk.Size.gibibytes(10),
+        timeout: cdk.Duration.minutes(5).plus(cdk.Duration.seconds(3))
+    });
+
+    //convert time function
+    const converttimefunction = new lambda.Function(this, 'ConvertTimeFunction', {
+        functionName: "convert_timestamp",
+        description: "Convert Time Lambda Function",
+        handler: "lambda_function.lambda_handler",
+        runtime: lambda.Runtime.PYTHON_3_12,
+        code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/transform/converttime')),
+        layers: [pandasLayer],
+        role: fraudTransformLambdaRole,
+        memorySize: 10240,
+        ephemeralStorageSize: cdk.Size.gibibytes(10),
+        timeout: cdk.Duration.minutes(5).plus(cdk.Duration.seconds(3))
+    });
+
+    //symbol removal function
+    const symbolremovalfunction = new lambda.Function(this, 'SymbolRemovalFunction', {
+        functionName: "symbol_removal",
+        description: "Convert Time Lambda Function",
+        handler: "lambda_function.lambda_handler",
+        runtime: lambda.Runtime.PYTHON_3_12,
+        code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/transform/symbolremoval')),
+        layers: [pandasLayer],
+        role: fraudTransformLambdaRole,
+        memorySize: 10240,
+        ephemeralStorageSize: cdk.Size.gibibytes(10),
+        timeout: cdk.Duration.minutes(5).plus(cdk.Duration.seconds(3))
+    });
+
+    //text to lowercase function
+    const text2lowerfunction = new lambda.Function(this, 'Text2LowercaseFunction', {
+        functionName: "text_2_lower",
+        description: "Text to Lowercase Lambda Function",
+        handler: "lambda_function.lambda_handler",
+        runtime: lambda.Runtime.PYTHON_3_12,
+        code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/transform/text2lower')),
+        layers: [pandasLayer],
+        role: fraudTransformLambdaRole,
+        memorySize: 10240,
+        ephemeralStorageSize: cdk.Size.gibibytes(10),
+        timeout: cdk.Duration.minutes(5).plus(cdk.Duration.seconds(3))
+    });
+
+    //event time function
+    const eventtimefunction = new lambda.Function(this, 'EventTimeFunction', {
+        functionName: "event_time",
+        description: "Event Time Lambda Function",
+        handler: "lambda_function.lambda_handler",
+        runtime: lambda.Runtime.PYTHON_3_12,
+        code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/transform/eventtime')),
+        layers: [pandasLayer],
+        role: fraudTransformLambdaRole,
+        memorySize: 10240,
+        ephemeralStorageSize: cdk.Size.gibibytes(10),
+        timeout: cdk.Duration.minutes(5).plus(cdk.Duration.seconds(3))
+    });
+
+    // convert to long function
+    const convert2longfunction = new lambda.Function(this, 'Convert2LongFunction', {
+        functionName: "convert_2_long",
+        description: "Event Time Lambda Function",
+        handler: "lambda_function.lambda_handler",
+        runtime: lambda.Runtime.PYTHON_3_12,
+        code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/transform/convert2long')),
+        layers: [pandasLayer],
+        role: fraudTransformLambdaRole,
+        memorySize: 10240,
+        ephemeralStorageSize: cdk.Size.gibibytes(10),
+        timeout: cdk.Duration.minutes(5).plus(cdk.Duration.seconds(3))
+    });
+
+        // One-Hot Encode function
+    const onehotencodefunction = new lambda.Function(this, 'OneHotEncodeFunction', {
+        functionName: "onehot_encode",
+        description: "One Hot Encode Lambda Function",
+        handler: "lambda_function.lambda_handler",
+        runtime: lambda.Runtime.PYTHON_3_12,
+        code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/transform/onehotencode')),
+        layers: [pandasLayer],
+        role: fraudTransformLambdaRole,
+        memorySize: 10240,
+        ephemeralStorageSize: cdk.Size.gibibytes(10),
+        timeout: cdk.Duration.minutes(5).plus(cdk.Duration.seconds(3))
+    });
+
+      // categorical to ordinal function
+    const categorical2ordfunction = new lambda.Function(this, 'Categorical2OrdFunction', {
+        functionName: "categorical_2_ord",
+        description: "Categorical to Ordinal Lambda Function",
+        handler: "lambda_function.lambda_handler",
+        runtime: lambda.Runtime.PYTHON_3_12,
+        code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/transform/cat2ord')),
+        layers: [pandasLayer],
+        role: fraudTransformLambdaRole,
+        memorySize: 10240,
+        ephemeralStorageSize: cdk.Size.gibibytes(10),
+        timeout: cdk.Duration.minutes(5).plus(cdk.Duration.seconds(3))
+    });
+
+
+    // Bedrock Agent Role
+    const bedrockAgentRole = new iam.Role(this, 'BedrockAgentRole', {
+        assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com'),
+        managedPolicies: [
+            iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonBedrockFullAccess'),
+            iam.ManagedPolicy.fromAwsManagedPolicyName('AWSLambda_FullAccess')
+        ]
+    });
+
+// Bedrock Agent
+    const fraudDataTransformerAgent = new bedrock.CfnAgent(this, 'FraudDataTransformerAgent', {
+      agentName: 'FraudDataTransformer',
+      description: 'Agent for fraud data transformation',
+      foundationModel: foundationModel,
+      instruction: 'You are a fraud data transformation agent that helps process and transform fraud detection data.',
+      idleSessionTtlInSeconds: 300,
+      agentResourceRoleArn: bedrockAgentRole.roleArn,
+      actionGroups: [{
+        actionGroupName: 'TransformActionGroup',
+        description: 'Transform fraud data',
+        actionGroupExecutor: {
+          lambda: dropcolumnsfunction.functionArn
+        },
+        apiSchema: {
+          payload: `{
+            "openapi": "3.0.0",
+            "info": {
+              "title": "Fraud_Data_Transformer_API",
+              "version": "1.0.0"
+            },
+            "paths": {
+              "/transform": {
+                "post": {
+                  "operationId": "transform_data",
+                  "description": "Transform fraud detection data",
+                  "responses": {
+                    "200": {
+                      "description": "Data transformed successfully",
+                      "content": {
+                        "application/json": {
+                          "schema": {
+                            "type": "object",
+                            "properties": {
+                              "transformedData": {
+                                "type": "string",
+                                "description": "Transformed data result"
+                              },
+                              "status": {
+                                "type": "string",
+                                "description": "Transformation status"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "requestBody": {
+                    "required": true,
+                    "content": {
+                      "application/json": {
+                        "schema": {
+                          "required": ["data"],
+                          "properties": {
+                            "data": {
+                              "type": "string",
+                              "description": "Input data to transform"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }`
+        }
+      }]
+    });
+
+    dropcolumnsfunction.addPermission('BedrockInvokePermission', {
+        principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
+        action: 'lambda:InvokeFunction'
+    });
+    converttimefunction.addPermission('BedrockInvokePermission', {
+        principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
+        action: 'lambda:InvokeFunction'
+    });
+    symbolremovalfunction.addPermission('BedrockInvokePermission', {
+        principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
+        action: 'lambda:InvokeFunction'
+    });
+    text2lowerfunction.addPermission('BedrockInvokePermission', {
+        principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
+        action: 'lambda:InvokeFunction'
+    });
+    eventtimefunction.addPermission('BedrockInvokePermission', {
+        principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
+        action: 'lambda:InvokeFunction'
+    });
+    convert2longfunction.addPermission('BedrockInvokePermission', {
+        principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
+        action: 'lambda:InvokeFunction'
+    });
+    onehotencodefunction.addPermission('BedrockInvokePermission', {
+        principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
+        action: 'lambda:InvokeFunction'
+    });
+    categorical2ordfunction.addPermission('BedrockInvokePermission', {
+        principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
+        action: 'lambda:InvokeFunction'
+    });
+
+    // Kendra Index Role
+    const kendraIndexRole = new iam.Role(this, 'KendraIndexRole', {
+        assumedBy: new iam.ServicePrincipal('kendra.amazonaws.com'),
+        managedPolicies: [
+            iam.ManagedPolicy.fromAwsManagedPolicyName('CloudWatchLogsFullAccess')
+        ]
+    });
+
+    // Kendra Data Source Role
+    const kendraDataSourceRole = new iam.Role(this, 'KendraDataSourceRole', {
+        assumedBy: new iam.ServicePrincipal('kendra.amazonaws.com'),
+        managedPolicies: [
+            iam.ManagedPolicy.fromAwsManagedPolicyName('CloudWatchLogsFullAccess')
+        ]
+    });
+
+    // kendraDataSourceRole.addToPolicy(
     //     new iam.PolicyStatement({
     //         effect: iam.Effect.ALLOW,
-    //         actions: ['lambda:InvokeFunction'],
-    //         resources: [TransformFunction.functionArn]
+    //         actions: [
+    //             'kendra:BatchPutDocument',
+    //             'kendra:BatchDeleteDocument'
+    //         ],
+    //         resources: [fraudGithubIndex.attrArn]
     //     })
     // );
-
-    // // Bedrock Agent
-    // const fraudDataTransformerAgent = new bedrock.CfnAgent(this, 'FraudDataTransformerAgent', {
-    //     agentName: 'FraudDataTransformer',
-    //     agentResourceRoleArn: bedrockAgentRole.roleArn,
-    //     foundationModel: 'anthropic.claude-3-sonnet-20240229-v1:0',
-    //     instruction: 'You are a fraud data transformation agent that helps process and transform fraud detection data.',
-    //     actionGroups: [{
-    //         actionGroupName: 'TransformActionGroup',
-    //         actionGroupExecutor: {
-    //             lambda: TransformFunction.functionArn
-    //         },
-    //         apiSchema: {
-    //             payload: JSON.stringify({
-    //                 openapi: '3.0.0',
-    //                 info: {
-    //                     title: 'Fraud Data Transformer API',
-    //                     version: '1.0.0'
-    //                 },
-    //                 paths: {
-    //                     '/transform': {
-    //                         post: {
-    //                             summary: 'Transform fraud data',
-    //                             operationId: 'transformData',
-    //                             requestBody: {
-    //                                 required: true,
-    //                                 content: {
-    //                                     'application/json': {
-    //                                         schema: {
-    //                                             type: 'object',
-    //                                             properties: {
-    //                                                 data: {
-    //                                                     type: 'string',
-    //                                                     description: 'Input data to transform'
-    //                                                 }
-    //                                             },
-    //                                             required: ['data']
-    //                                         }
-    //                                     }
-    //                                 }
-    //                             },
-    //                             responses: {
-    //                                 '200': {
-    //                                     description: 'Successful transformation',
-    //                                     content: {
-    //                                         'application/json': {
-    //                                             schema: {
-    //                                                 type: 'object',
-    //                                                 properties: {
-    //                                                     transformedData: {
-    //                                                         type: 'string',
-    //                                                         description: 'Transformed data result'
-    //                                                     }
-    //                                                 }
-    //                                             }
-    //                                         }
-    //                                     }
-    //                                 }
-    //                             }
-    //                         }
-    //                     }
-    //                 }
-    //             })
-    //         }
-    //     }]
-    // });
-
-    // // Grant Lambda permission to be invoked by Bedrock
-    // TransformFunction.addPermission('BedrockInvokePermission', {
-    //     principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
-    //     action: 'lambda:InvokeFunction',
-    //     sourceArn: `arn:aws:bedrock:${this.region}:${this.account}:agent/${fraudDataTransformerAgent.attrAgentId}`
-    // });
-
-    // // Kendra Index Role
-    // const kendraIndexRole = new iam.Role(this, 'KendraIndexRole', {
-    //     assumedBy: new iam.ServicePrincipal('kendra.amazonaws.com'),
-    //     managedPolicies: [
-    //         iam.ManagedPolicy.fromAwsManagedPolicyName('CloudWatchLogsFullAccess')
-    //     ]
-    // });
-
-    // // Kendra Data Source Role
-    // const kendraDataSourceRole = new iam.Role(this, 'KendraDataSourceRole', {
-    //     assumedBy: new iam.ServicePrincipal('kendra.amazonaws.com'),
-    //     managedPolicies: [
-    //         iam.ManagedPolicy.fromAwsManagedPolicyName('CloudWatchLogsFullAccess')
-    //     ]
-    // });
 
     // // Kendra Index
     // const fraudGithubIndex = new kendra.CfnIndex(this, 'FraudGithubIndex', {
@@ -821,13 +943,25 @@ export class BackendStack extends cdk.Stack {
     //     roleArn: kendraIndexRole.roleArn
     // });
 
-    // // GitHub Data Source (Note: Full GitHub configuration may need to be done via AWS Console)
+    // // Web Crawler Data Source
     // const githubDataSource = new kendra.CfnDataSource(this, 'GitHubDataSource', {
     //     indexId: fraudGithubIndex.attrId,
     //     name: 'GitHubSource',
-    //     type: 'GITHUB',
+    //     type: 'WEBCRAWLER',
     //     roleArn: kendraDataSourceRole.roleArn,
-    //     schedule: 'cron(0 0 ? * SUN *)'
+    //     schedule: 'cron(0 0 ? * SUN *)',
+    //     dataSourceConfiguration: {
+    //         webCrawlerConfiguration: {
+    //             urls: {
+    //                 seedUrlConfiguration: {
+    //                     seedUrls: ['https://github.com/topics/fraud-detection']
+    //                 }
+    //             },
+    //             crawlDepth: 2,
+    //             maxLinksPerPage: 100,
+    //             maxContentSizePerPageInMegaBytes: 50
+    //         }
+    //     }
     // });
 
 
@@ -856,5 +990,6 @@ export class BackendStack extends cdk.Stack {
       value: `https://${domain.domainName}.auth.${this.region}.amazoncognito.com`,
       description: 'Cognito Domain URL'
     });
+    
   }
 }
