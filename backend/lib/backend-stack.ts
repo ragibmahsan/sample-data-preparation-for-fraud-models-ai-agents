@@ -279,7 +279,8 @@ export class BackendStack extends cdk.Stack {
         lambda.LayerVersion.fromLayerVersionArn(
           this,
           'PandasLayer',
-          `arn:aws:lambda:${this.region}:336392948345:layer:AWSSDKPandas-Python312:1`
+          `arn:aws:lambda:us-east-1:336392948345:layer:AWSSDKPandas-Python313:3
+`
         )
       ]
     });
@@ -287,7 +288,7 @@ export class BackendStack extends cdk.Stack {
     // Create chat handler Lambda
     const chatHandler = new lambda.Function(this, 'ChatHandler', {
       functionName: 'fraud-chat-handler',
-      runtime: lambda.Runtime.PYTHON_3_12,
+      runtime: lambda.Runtime.PYTHON_3_13,
       handler: 'chat_handler.lambda_handler',
       code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/chat')),
       role: chatHandlerRole,
@@ -304,18 +305,17 @@ export class BackendStack extends cdk.Stack {
       assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com')
     });
 
+    bedrockDataAnalysisAgentRole.addManagedPolicy(
+      iam.ManagedPolicy.fromAwsManagedPolicyName('AWSLambda_FullAccess')
+    );
+
     bedrockDataAnalysisAgentRole.addToPolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: [
-          'bedrock:*',
-          'lambda:InvokeFunction',
-          'lambda:GetFunction'
+          'bedrock:*'
         ],
-        resources: [
-          createFlowFunction.functionArn,
-          processingFunction.functionArn
-        ]
+        resources: ['*']
       })
     );
 
@@ -328,15 +328,9 @@ export class BackendStack extends cdk.Stack {
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: [
-          'bedrock:*',
-          'lambda:InvokeFunction',
-          'lambda:GetFunction'
+          'bedrock:*'
         ],
-        resources: [
-          createFlowFunction.functionArn,
-          processingFunction.functionArn,
-          chatHandler.functionArn
-        ]
+        resources: ['*']
       })
     );
 
@@ -345,9 +339,10 @@ export class BackendStack extends cdk.Stack {
       agentName: 'DataAnalysisAgent',
       description: 'Agent for data analysis and processing',
       foundationModel: foundationModel,
-      instruction: `You are an expert data scientist specializing in data quality analysis, feature engineering, and ML model development. Your role is to assist users with data analysis, quality assessment, and model improvement through advanced statistical techniques and machine learning best practices.`,
+      instruction: `You are an expert data scientist specializing in data quality analysis, feature engineering, and ML model development. Your role is to assist users with data analysis, quality assessment, and model improvement through advanced statistical techniques and machine learning best practices. You collaborate with the Supervisor Agent to ensure coordinated execution of complex workflows.`,
       idleSessionTtlInSeconds: 300,
       agentResourceRoleArn: bedrockDataAnalysisAgentRole.roleArn,
+      agentCollaboration: 'ENABLED',
       actionGroups: [{
         actionGroupName: 'flow_creation_actions',
         description: 'Create a fraud detection flow',
@@ -572,6 +567,20 @@ export class BackendStack extends cdk.Stack {
       instruction: `You are a supervisor agent responsible for coordinating data analysis tasks. You work with the Data Analysis Agent to ensure proper execution of data processing and analysis workflows.`,
       idleSessionTtlInSeconds: 300,
       agentResourceRoleArn: bedrockSupervisorAgentRole.roleArn,
+      agentCollaboration: 'ENABLED',
+      agentCollaborators: [{
+        agentDescriptor: {
+          aliasArn: `arn:aws:bedrock:${this.region}:${this.account}:agent-alias/${dataAnalysisAgent.attrAgentId}/prod`
+        },
+        collaborationInstruction: `Collaborate with the Data Analysis Agent for specialized tasks including:
+                                    - Data quality analysis and validation
+                                    - Feature engineering and preprocessing
+                                    - Model development and optimization
+                                    - Statistical analysis and insights
+                                    - Performance monitoring and improvement`,
+        collaboratorName: 'DataAnalysisAgent',
+        relayConversationHistory: 'ENABLED'
+      }],
       actionGroups: [{
         actionGroupName: 'flow_creation_actions',
         description: 'Create a fraud detection flow',
