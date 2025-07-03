@@ -13,7 +13,7 @@ import { aws_bedrock as bedrock } from 'aws-cdk-lib';
 /** 
  * Ensure that you have enabled access to foundational model
 */
-const foundationModel = 'amazon.nova-lite-v1:0';
+const foundationModel = 'amazon.nova-micro-v1:0';
 
 export class BackendStack extends cdk.Stack {
   public readonly userPool: cognito.UserPool;
