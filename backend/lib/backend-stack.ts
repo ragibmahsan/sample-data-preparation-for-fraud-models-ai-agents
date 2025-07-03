@@ -163,12 +163,27 @@ export class BackendStack extends cdk.Stack {
     );
 
     const analysisLambdaRole = new iam.Role(this, 'AnalysisLambdaRole', {
-      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+      assumedBy: new iam.CompositePrincipal(
+        new iam.ServicePrincipal('lambda.amazonaws.com'),
+        new iam.ServicePrincipal('sagemaker.amazonaws.com')
+      ),
       managedPolicies: [
         iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
         iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSageMakerFullAccess')
       ]
     });
+
+    analysisLambdaRole.addToPolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          'iam:PassRole'
+        ],
+        resources: [
+          analysisLambdaRole.roleArn
+        ]
+      })
+    );
 
     analysisLambdaRole.addToPolicy(
       new iam.PolicyStatement({

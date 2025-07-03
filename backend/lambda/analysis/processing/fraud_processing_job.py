@@ -168,26 +168,22 @@ def lambda_handler(event, context):
         # Log the full event for debugging
         logger.info(f"Received event: {json.dumps(event, indent=2)}")
 
-        # Extract event parameters
-        actionGroup = event.get('actionGroup', '')
-        function = event.get('function', '')
-        parameters = event.get('parameters', [])
+        # Extract API path and request body
+        api_path = event.get('apiPath', '')
+        request_body = event.get('requestBody', {})
+        content = request_body.get('content', {}).get('application/json', {})
+        properties = content.get('properties', [])
 
-        logger.info(f"Processing parameters: {parameters}")
+        # Convert properties to a dictionary for easier access
+        params = {}
+        for prop in properties:
+            params[prop.get('name')] = prop.get('value')
 
-        # Get function name from event
-        function = event.get('function', '')
-        logger.info(f"Function being called: {function}")
+        logger.info(f"Processing parameters: {params}")
 
-        # Handle different functions
-        if function == 'analyze_report':
-            # Extract report URI from parameters
-            report_uri = None
-            for param in parameters:
-                if param.get('name') == 'report_uri':
-                    report_uri = param.get('value')
-                    break
-
+        # Handle different API paths
+        if api_path == '/analyze_report':
+            report_uri = params.get('report_uri')
             if not report_uri:
                 raise ValueError(
                     "report_uri parameter is required for analyze_report function")
@@ -201,20 +197,10 @@ def lambda_handler(event, context):
                 'data': report_data,
                 'status': 'Completed'
             }
-        elif function == 'create_data_quality_insight':
-            # Handle report creation
-            flow_s3_uri = None
-            transactions_s3_uri = None
-
+        elif api_path == '/create_data_quality_insight':
             # Extract parameters for report creation
-            for param in parameters:
-                param_name = param.get('name')
-                param_value = param.get('value')
-
-                if param_name == 'flow_s3_uri':
-                    flow_s3_uri = param_value
-                elif param_name == 'transactions_s3_uri':
-                    transactions_s3_uri = param_value
+            flow_s3_uri = params.get('flow_s3_uri')
+            transactions_s3_uri = params.get('transactions_s3_uri')
 
             logger.info(
                 f"Extracted URIs - flow: {flow_s3_uri}, transactions: {transactions_s3_uri}")
@@ -232,18 +218,17 @@ def lambda_handler(event, context):
             'message': 'Analysis completed successfully.' if 'reportUri' in result else 'Data quality insight job is now running. This process can take up to 2 hours to complete. You can check the job status using the provided jobName.'
         }
 
-        # Format response to match Bedrock agent's expected schema
+        # Format response to match Bedrock agent's OpenAPI schema
         api_response = {
             'messageVersion': '1.0',
             'response': {
-                'actionGroup': actionGroup,
-                'function': function,
-                'functionResponse': {
-                    'responseState': 'REPROMPT',
-                    'responseBody': {
-                        'TEXT': {
-                            'body': json.dumps(result_with_message)
-                        }
+                'actionGroup': event.get('actionGroup', ''),
+                'apiPath': event.get('apiPath', ''),
+                'httpMethod': event.get('httpMethod', 'POST'),
+                'httpStatusCode': 200,
+                'responseBody': {
+                    'application/json': {
+                        'body': result_with_message
                     }
                 }
             },
@@ -257,20 +242,19 @@ def lambda_handler(event, context):
     except Exception as e:
         logger.error(f"Error in lambda_handler: {str(e)}")
 
-        # Format error response to match Bedrock agent's expected schema
+        # Format error response to match Bedrock agent's OpenAPI schema
         error_response = {
             'messageVersion': '1.0',
             'response': {
-                'actionGroup': actionGroup,
-                'function': function,
-                'functionResponse': {
-                    'responseState': 'FAILURE',
-                    'responseBody': {
-                        'TEXT': {
-                            'body': json.dumps({
-                                'error': str(e),
-                                'status': 'Failed'
-                            })
+                'actionGroup': event.get('actionGroup', ''),
+                'apiPath': event.get('apiPath', ''),
+                'httpMethod': event.get('httpMethod', 'POST'),
+                'httpStatusCode': 400,
+                'responseBody': {
+                    'application/json': {
+                        'body': {
+                            'error': str(e),
+                            'status': 'Failed'
                         }
                     }
                 }
