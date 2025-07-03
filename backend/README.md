@@ -12,3 +12,15 @@ The `cdk.json` file tells the CDK Toolkit how to execute your app.
 * `npx cdk deploy`  deploy this stack to your default AWS account/region
 * `npx cdk diff`    compare deployed stack with current state
 * `npx cdk synth`   emits the synthesized CloudFormation template
+
+## .env template
+
+REACT_APP_AWS_REGION=
+REACT_APP_COGNITO_USER_POOL_ID=
+REACT_APP_COGNITO_CLIENT_ID=
+REACT_APP_COGNITO_DOMAIN=
+REACT_APP_REDIRECT_SIGNIN=http://localhost:3000/
+REACT_APP_REDIRECT_SIGNOUT=http://localhost:3000/
+REACT_APP_API_GATEWAY_ENDPOINT=
+
+Fill in values from the output of stack in CloudFormation on AWS Console

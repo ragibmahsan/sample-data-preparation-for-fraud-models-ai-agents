@@ -10,7 +10,7 @@ const cognitoAuthConfig = {
     redirect_uri: process.env.REACT_APP_REDIRECT_SIGNIN,
     post_logout_redirect_uri: process.env.REACT_APP_REDIRECT_SIGNOUT,
     response_type: "code",
-    scope: "email openid phone"
+    scope: "email openid phone profile"
 };
 
 const root = ReactDOM.createRoot(

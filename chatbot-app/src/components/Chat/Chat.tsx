@@ -40,7 +40,7 @@ const Chat: React.FC = () => {
         try {
             // Store the access token in localStorage for API calls
             if (auth.user?.access_token) {
-                localStorage.setItem('auth_token', auth.user.access_token);
+                localStorage.setItem('auth_token', `Bearer ${auth.user.access_token}`);
             }
 
             const response = await sendMessage(inputValue.trim());

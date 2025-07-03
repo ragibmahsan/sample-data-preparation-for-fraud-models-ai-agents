@@ -1,21 +1,61 @@
 import * as cdk from 'aws-cdk-lib';
+import { CfnOutput } from 'aws-cdk-lib';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as path from 'path';
-import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
-import * as bedrock from 'aws-cdk-lib/aws-bedrock';
 import * as kendra from 'aws-cdk-lib/aws-kendra';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
+import { aws_bedrock as bedrock } from 'aws-cdk-lib';
+
+/** 
+ * Ensure that you have enabled access to foundational model
+*/
+const foundationModel = 'amazon.nova-lite-v1:0';
 
 export class BackendStack extends cdk.Stack {
   public readonly userPool: cognito.UserPool;
   public readonly userPoolClient: cognito.UserPoolClient;
   public readonly api: apigateway.RestApi;
+  public readonly bucket: s3.Bucket;
 
   constructor(scope: cdk.App, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
+
+    // Create S3 Bucket
+    this.bucket = new s3.Bucket(this, 'FraudDetectionBucket', {
+      bucketName: `fraud-detection-${this.account}-${this.region}`,
+      versioned: false,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+    });
+
+    // Create folder structure in S3 bucket
+    const folderStructure = new s3deploy.BucketDeployment(this, 'CreateFolderStructure', {
+      sources: [s3deploy.Source.data('.keep', '')],
+      destinationBucket: this.bucket,
+      destinationKeyPrefix: 'flows'
+    });
+
+    const reportsFolder = new s3deploy.BucketDeployment(this, 'CreateReportsFolder', {
+      sources: [s3deploy.Source.data('.keep', '')],
+      destinationBucket: this.bucket,
+      destinationKeyPrefix: 'reports'
+    });
+
+    const inputDataFolder = new s3deploy.BucketDeployment(this, 'CreateInputDataFolder', {
+      sources: [s3deploy.Source.data('.keep', '')],
+      destinationBucket: this.bucket,
+      destinationKeyPrefix: 'input_data'
+    });
+
+    const transformedDataFolder = new s3deploy.BucketDeployment(this, 'CreateTransformedDataFolder', {
+      sources: [s3deploy.Source.data('.keep', '')],
+      destinationBucket: this.bucket,
+      destinationKeyPrefix: 'transformed_data'
+    });
 
     // Create Cognito User Pool
     this.userPool = new cognito.UserPool(this, 'ChatbotUserPool', {
@@ -49,26 +89,34 @@ export class BackendStack extends cdk.Stack {
     // Create User Pool Client
     this.userPoolClient = this.userPool.addClient('ChatbotUserPoolClient', {
       userPoolClientName: 'chatbot-app-client',
+      idTokenValidity: cdk.Duration.days(1),
+      accessTokenValidity: cdk.Duration.days(1),
       authFlows: {
         userPassword: true,
         userSrp: true
       },
       oAuth: {
         flows: {
-          implicitCodeGrant: true
+          authorizationCodeGrant: true
         },
         callbackUrls: [
-          'http://localhost:3000/callback'
+          'http://localhost:3000',
+          'http://localhost:3000/'
         ],
         logoutUrls: [
-          'http://localhost:3000/login'
+          'http://localhost:3000',
+          'http://localhost:3000/'
         ],
         scopes: [
           cognito.OAuthScope.EMAIL,
           cognito.OAuthScope.OPENID,
+          cognito.OAuthScope.PHONE,
           cognito.OAuthScope.PROFILE
         ]
-      }
+      },
+      generateSecret: false,
+      preventUserExistenceErrors: true,
+      supportedIdentityProviders: [cognito.UserPoolClientIdentityProvider.COGNITO]
     });
 
     // Create API Gateway with Cognito Authorizer
@@ -77,134 +125,425 @@ export class BackendStack extends cdk.Stack {
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
         allowMethods: apigateway.Cors.ALL_METHODS,
-        allowHeaders: apigateway.Cors.DEFAULT_HEADERS
-      }
+        allowHeaders: [
+          'Content-Type',
+          'Authorization'
+        ]
+      },
+      deploy: false // Don't deploy until all resources are created
     });
 
     // Create Cognito Authorizer
     const auth = new apigateway.CognitoUserPoolsAuthorizer(this, 'ChatbotAuthorizer', {
-      cognitoUserPools: [this.userPool]
+      cognitoUserPools: [this.userPool],
+      identitySource: 'method.request.header.Authorization',
+      resultsCacheTtl: cdk.Duration.seconds(0)
     });
 
-    // Fraud Transform Lambda Role
-    const fraudTransformLambdaRole = new iam.Role(this, 'FraudTransformLambdaRole', {
+    // Create all IAM roles first
+    const listLambdaRole = new iam.Role(this, 'ListLambdaRole', {
       assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
-      roleName: 'fraud-transform-lambda-role',
       managedPolicies: [
         iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole')
-      ],
-      inlinePolicies: {
-        S3AccessPolicy: new iam.PolicyDocument({
-          statements: [
-            new iam.PolicyStatement({
-              effect: iam.Effect.ALLOW,
-              actions: [
-                's3:GetObject',
-                's3:PutObject',
-                's3:ListBucket'
-              ],
-              resources: [
-                'arn:aws:s3:::*/*',
-                'arn:aws:s3:::*'
-              ]
-            })
-          ]
-        })
-      }
-    });
-  
-    const TransformFunction = new lambda.Function(this, 'TransformFunction', {
-      functionName: "fraud-data-transformer",
-      description: "Transform Lambda Function",
-      handler: "lambda_function.lambda_handler",
-      runtime: lambda.Runtime.PYTHON_3_12,
-      code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/transform')),
-      layers: [
-        new lambda.LayerVersion(this, 'pandas', {
-          code: lambda.Code.fromAsset(path.join(__dirname, '../lib/layers/pandas-layer-95082f06-6857-4dd1-9ed4-9e11b42f7f69.zip')),
-        })
-      ],
-      role: fraudTransformLambdaRole,
-      memorySize: 10240,
-      ephemeralStorageSize: cdk.Size.gibibytes(10), // Set the ephemeral storage size to 10240MB
-      timeout: cdk.Duration.minutes(5).plus(cdk.Duration.seconds(3)) // Set the timeout to 5 minutes and 3 seconds
-    });
-
-    // Add authorizer to API Gateway
-    const chatEndpoint = this.api.root.addResource('chat');
-    chatEndpoint.addMethod('POST', new apigateway.LambdaIntegration(TransformFunction), {
-      authorizer: auth,
-      authorizationType: apigateway.AuthorizationType.COGNITO
-    });
-
-    // Bedrock Agent Role
-    const bedrockAgentRole = new iam.Role(this, 'BedrockAgentRole', {
-      assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com'),
-      managedPolicies: [
-        iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonBedrockFullAccess')
       ]
     });
 
-    bedrockAgentRole.addToPolicy(
+    listLambdaRole.addToPolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
-        actions: ['lambda:InvokeFunction'],
-        resources: [TransformFunction.functionArn]
+        actions: [
+          's3:ListBucket',
+          's3:GetObject'
+        ],
+        resources: [
+          this.bucket.bucketArn,
+          `${this.bucket.bucketArn}/*`
+        ]
       })
     );
 
-    // Bedrock Agent
-    const fraudDataTransformerAgent = new bedrock.CfnAgent(this, 'FraudDataTransformerAgent', {
-      agentName: 'FraudDataTransformer',
-      agentResourceRoleArn: bedrockAgentRole.roleArn,
-      foundationModel: 'anthropic.claude-3-sonnet-20240229-v1:0',
-      instruction: 'You are a fraud data transformation agent that helps process and transform fraud detection data.',
+    const analysisLambdaRole = new iam.Role(this, 'AnalysisLambdaRole', {
+      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
+        iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSageMakerFullAccess')
+      ]
+    });
+
+    analysisLambdaRole.addToPolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          's3:GetObject',
+          's3:PutObject',
+          's3:ListBucket'
+        ],
+        resources: [
+          this.bucket.bucketArn,
+          `${this.bucket.bucketArn}/*`
+        ]
+      })
+    );
+
+    const chatHandlerRole = new iam.Role(this, 'ChatHandlerRole', {
+      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole')
+      ]
+    });
+
+    chatHandlerRole.addToPolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          'bedrock:*'
+        ],
+        resources: ['*']
+      })
+    );
+
+    // Create Lambda functions
+    const listFlowUriFunction = new lambda.Function(this, 'ListFlowUriFunction', {
+      functionName: 'fraud-list-flow-uri',
+      runtime: lambda.Runtime.PYTHON_3_13,
+      handler: 'list_flow_uri.lambda_handler',
+      code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/list/flow')),
+      role: listLambdaRole,
+      environment: {
+        S3_BUCKET_NAME: this.bucket.bucketName,
+        S3_FLOW_PREFIX: 'flows'
+      },
+      timeout: cdk.Duration.minutes(1)
+    });
+
+    const listReportsUriFunction = new lambda.Function(this, 'ListReportsUriFunction', {
+      functionName: 'fraud-list-reports-uri',
+      runtime: lambda.Runtime.PYTHON_3_13,
+      handler: 'list_reports_uri.lambda_handler',
+      code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/list/reports')),
+      role: listLambdaRole,
+      environment: {
+        S3_BUCKET_NAME: this.bucket.bucketName,
+        S3_DATA_PREFIX: 'reports'
+      },
+      timeout: cdk.Duration.minutes(1)
+    });
+
+    const listS3UriFunction = new lambda.Function(this, 'ListS3UriFunction', {
+      functionName: 'fraud-list-s3-uri',
+      runtime: lambda.Runtime.PYTHON_3_13,
+      handler: 'list_s3_uri.lambda_handler',
+      code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/list/data')),
+      role: listLambdaRole,
+      environment: {
+        S3_BUCKET_NAME: this.bucket.bucketName,
+        S3_DATA_PREFIX: 'input_data'
+      },
+      timeout: cdk.Duration.minutes(1)
+    });
+
+    // Create processing Lambda function
+    const processingFunction = new lambda.Function(this, 'ProcessingFunction', {
+      functionName: 'fraud-processing',
+      runtime: lambda.Runtime.PYTHON_3_13,
+      handler: 'fraud_processing_job.lambda_handler',
+      code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/analysis/processing')),
+      role: analysisLambdaRole,
+      environment: {
+        BUCKET_NAME: this.bucket.bucketName,
+        SAGEMAKER_ROLE_ARN: analysisLambdaRole.roleArn,
+        CONTAINER_URI: '663277389841.dkr.ecr.us-east-1.amazonaws.com/sagemaker-data-wrangler-container:5.0.9',
+        INSTANCE_COUNT: '2',
+        INSTANCE_TYPE: 'ml.m5.4xlarge',
+        VOLUME_SIZE: '30'
+      },
+      timeout: cdk.Duration.minutes(5)
+    });
+
+    // Create Lambda function for create_flow with resource-based policy
+    const createFlowFunction = new lambda.Function(this, 'CreateFlowFunction', {
+      functionName: 'fraud-create-flow',
+      runtime: lambda.Runtime.PYTHON_3_13,
+      handler: 'create_flow.lambda_handler',
+      code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/analysis/flow')),
+      role: analysisLambdaRole,
+      timeout: cdk.Duration.minutes(5),
+      environment: {
+        BUCKET_NAME: this.bucket.bucketName,
+        SAMPLE_SIZE: '10000',
+        INSTANCE_TYPE: 'ml.m5.xlarge',
+        INSTANCE_COUNT: '2'
+      },
+      memorySize: 1024,
+      layers: [
+        lambda.LayerVersion.fromLayerVersionArn(
+          this,
+          'PandasLayer',
+          `arn:aws:lambda:${this.region}:336392948345:layer:AWSSDKPandas-Python312:1`
+        )
+      ]
+    });
+
+    // Create chat handler Lambda
+    const chatHandler = new lambda.Function(this, 'ChatHandler', {
+      functionName: 'fraud-chat-handler',
+      runtime: lambda.Runtime.PYTHON_3_12,
+      handler: 'chat_handler.lambda_handler',
+      code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/chat')),
+      role: chatHandlerRole,
+      environment: {
+        ENABLE_DEBUG: 'true',
+        BEDROCK_AGENT_ID: '',  // Will be updated after supervisor agent is created
+        BEDROCK_AGENT_ALIAS_ID: ''  // Will be updated after supervisor agent alias is created
+      },
+      timeout: cdk.Duration.minutes(5)
+    });
+
+    // Create IAM role for the Bedrock data analysis agent
+    const bedrockDataAnalysisAgentRole = new iam.Role(this, 'BedrockDataAnalysisAgentRole', {
+      assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com')
+    });
+
+    bedrockDataAnalysisAgentRole.addToPolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          'bedrock:*',
+          'lambda:InvokeFunction',
+          'lambda:GetFunction'
+        ],
+        resources: [
+          createFlowFunction.functionArn,
+          processingFunction.functionArn
+        ]
+      })
+    );
+
+    // Create IAM role for the Bedrock supervisor agent
+    const bedrockSupervisorAgentRole = new iam.Role(this, 'BedrockSupervisorAgentRole', {
+      assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com')
+    });
+
+    bedrockSupervisorAgentRole.addToPolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          'bedrock:*',
+          'lambda:InvokeFunction',
+          'lambda:GetFunction'
+        ],
+        resources: [
+          createFlowFunction.functionArn,
+          processingFunction.functionArn,
+          chatHandler.functionArn
+        ]
+      })
+    );
+
+    // Create Bedrock data analysis agent
+    const dataAnalysisAgent = new bedrock.CfnAgent(this, 'DataAnalysisAgent', {
+      agentName: 'DataAnalysisAgent',
+      description: 'Agent for data analysis and processing',
+      foundationModel: foundationModel,
+      instruction: `You are an expert data scientist specializing in data quality analysis, feature engineering, and ML model development. Your role is to assist users with data analysis, quality assessment, and model improvement through advanced statistical techniques and machine learning best practices.`,
+      idleSessionTtlInSeconds: 300,
+      agentResourceRoleArn: bedrockDataAnalysisAgentRole.roleArn,
       actionGroups: [{
-        actionGroupName: 'TransformActionGroup',
+        actionGroupName: 'flow_creation_actions',
+        description: 'Create a fraud detection flow',
         actionGroupExecutor: {
-          lambda: TransformFunction.functionArn
+          lambda: createFlowFunction.functionArn
         },
         apiSchema: {
-          payload: JSON.stringify({
-            openapi: '3.0.0',
-            info: {
-              title: 'Fraud Data Transformer API',
-              version: '1.0.0'
+          payload: `{
+            "openapi": "3.0.0",
+            "info": {
+              "title": "Fraud_Detection_Flow_API",
+              "version": "1.0.0"
             },
-            paths: {
-              '/transform': {
-                post: {
-                  summary: 'Transform fraud data',
-                  operationId: 'transformData',
-                  requestBody: {
-                    required: true,
-                    content: {
-                      'application/json': {
-                        schema: {
-                          type: 'object',
-                          properties: {
-                            data: {
-                              type: 'string',
-                              description: 'Input data to transform'
+            "paths": {
+              "/create_flow": {
+                "post": {
+                  "operationId": "create_flow",
+                  "description": "Create a new fraud detection flow",
+                  "responses": {
+                    "200": {
+                      "description": "Flow created successfully",
+                      "content": {
+                        "application/json": {
+                          "schema": {
+                            "type": "object",
+                            "properties": {
+                              "flow_name": {
+                                "type": "string",
+                                "description": "Name of the created flow"
+                              },
+                              "s3_uri": {
+                                "type": "string",
+                                "description": "S3 URI of the created flow"
+                              },
+                              "status": {
+                                "type": "string",
+                                "description": "Status of the flow creation"
+                              },
+                              "message": {
+                                "type": "string",
+                                "description": "Result message"
+                              }
                             }
-                          },
-                          required: ['data']
+                          }
                         }
                       }
                     }
                   },
-                  responses: {
-                    '200': {
-                      description: 'Successful transformation',
-                      content: {
-                        'application/json': {
-                          schema: {
-                            type: 'object',
-                            properties: {
-                              transformedData: {
-                                type: 'string',
-                                description: 'Transformed data result'
+                  "requestBody": {
+                    "required": true,
+                    "content": {
+                      "application/json": {
+                          "schema": {
+                            "type": "object",
+                            "required": ["input_s3_uri", "output_s3_path", "target_column", "problem_type"],
+                            "properties": {
+                              "input_s3_uri": {
+                                "type": "string",
+                                "description": "S3 URI of the input data file"
+                              },
+                              "output_s3_path": {
+                                "type": "string",
+                                "description": "Output path for the flow file"
+                              },
+                              "target_column": {
+                                "type": "string",
+                                "description": "Name of the target column for prediction"
+                              },
+                              "problem_type": {
+                                "type": "string",
+                                "enum": ["Classification", "Regression"],
+                                "description": "Type of machine learning problem"
                               }
+                            }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }`
+        }
+      },
+      {
+        actionGroupName: 'data_analysis_actions',
+        description: 'Data analysis and processing actions',
+        actionGroupExecutor: {
+          lambda: processingFunction.functionArn
+        },
+        apiSchema: {
+          payload: `{
+            "openapi": "3.0.0",
+            "info": {
+              "title": "Data_Analysis_API",
+              "version": "1.0.0"
+            },
+            "paths": {
+              "/analyze_report": {
+                "post": {
+                  "operationId": "analyze_report",
+                  "description": "Analyze a report from S3",
+                  "responses": {
+                    "200": {
+                      "description": "Report analyzed successfully",
+                      "content": {
+                        "application/json": {
+                          "schema": {
+                            "type": "object",
+                            "properties": {
+                              "reportUri": {
+                                "type": "string",
+                                "description": "S3 URI of the analyzed report"
+                              },
+                              "data": {
+                                "type": "object",
+                                "description": "Analyzed report data"
+                              },
+                              "status": {
+                                "type": "string",
+                                "description": "Analysis status"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "requestBody": {
+                    "required": true,
+                    "content": {
+                      "application/json": {
+                        "schema": {
+                          "type": "object",
+                          "required": ["report_uri"],
+                          "properties": {
+                            "report_uri": {
+                              "type": "string",
+                              "description": "S3 URI of the report to analyze"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "/create_data_quality_insight": {
+                "post": {
+                  "operationId": "create_data_quality_insight",
+                  "description": "Create data quality insight",
+                  "responses": {
+                    "200": {
+                      "description": "Data quality insight job created successfully",
+                      "content": {
+                        "application/json": {
+                          "schema": {
+                            "type": "object",
+                            "properties": {
+                              "jobName": {
+                                "type": "string",
+                                "description": "Name of the created job"
+                              },
+                              "jobArn": {
+                                "type": "string",
+                                "description": "ARN of the created job"
+                              },
+                              "resultsPath": {
+                                "type": "string",
+                                "description": "S3 path for job results"
+                              },
+                              "status": {
+                                "type": "string",
+                                "description": "Job status"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "requestBody": {
+                    "required": true,
+                    "content": {
+                      "application/json": {
+                        "schema": {
+                          "type": "object",
+                          "required": ["flow_s3_uri", "transactions_s3_uri"],
+                          "properties": {
+                            "flow_s3_uri": {
+                              "type": "string",
+                              "description": "S3 URI of the flow file"
+                            },
+                            "transactions_s3_uri": {
+                              "type": "string",
+                              "description": "S3 URI of the transactions file"
                             }
                           }
                         }
@@ -214,49 +553,214 @@ export class BackendStack extends cdk.Stack {
                 }
               }
             }
-          })
+          }`
         }
       }]
     });
 
-    // Grant Lambda permission to be invoked by Bedrock
-    TransformFunction.addPermission('BedrockInvokePermission', {
+    // Create data analysis agent alias
+    const dataAnalysisAgentAlias = new bedrock.CfnAgentAlias(this, 'DataAnalysisAgentAlias', {
+      agentAliasName: 'prod',
+      agentId: dataAnalysisAgent.attrAgentId
+    });
+
+    // Create Bedrock supervisor agent
+    const supervisorAgent = new bedrock.CfnAgent(this, 'SupervisorAgent', {
+      agentName: 'SupervisorAgent',
+      description: 'Supervisor agent for orchestrating data analysis',
+      foundationModel: foundationModel,
+      instruction: `You are a supervisor agent responsible for coordinating data analysis tasks. You work with the Data Analysis Agent to ensure proper execution of data processing and analysis workflows.`,
+      idleSessionTtlInSeconds: 300,
+      agentResourceRoleArn: bedrockSupervisorAgentRole.roleArn,
+      actionGroups: [{
+        actionGroupName: 'flow_creation_actions',
+        description: 'Create a fraud detection flow',
+        actionGroupExecutor: {
+          lambda: createFlowFunction.functionArn
+        },
+        apiSchema: {
+          payload: `{
+            "openapi": "3.0.0",
+            "info": {
+              "title": "Fraud_Detection_Flow_API",
+              "version": "1.0.0"
+            },
+            "paths": {
+              "/create_flow": {
+                "post": {
+                  "operationId": "create_flow",
+                  "description": "Create a new fraud detection flow",
+                  "responses": {
+                    "200": {
+                      "description": "Flow created successfully",
+                      "content": {
+                        "application/json": {
+                          "schema": {
+                            "type": "object",
+                            "properties": {
+                              "flow_name": {
+                                "type": "string",
+                                "description": "Name of the created flow"
+                              },
+                              "s3_uri": {
+                                "type": "string",
+                                "description": "S3 URI of the created flow"
+                              },
+                              "status": {
+                                "type": "string",
+                                "description": "Status of the flow creation"
+                              },
+                              "message": {
+                                "type": "string",
+                                "description": "Result message"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "requestBody": {
+                    "required": true,
+                    "content": {
+                      "application/json": {
+                          "schema": {
+                            "type": "object",
+                            "required": ["input_s3_uri", "output_s3_path", "target_column", "problem_type"],
+                            "properties": {
+                              "input_s3_uri": {
+                                "type": "string",
+                                "description": "S3 URI of the input data file"
+                              },
+                              "output_s3_path": {
+                                "type": "string",
+                                "description": "Output path for the flow file"
+                              },
+                              "target_column": {
+                                "type": "string",
+                                "description": "Name of the target column for prediction"
+                              },
+                              "problem_type": {
+                                "type": "string",
+                                "enum": ["Classification", "Regression"],
+                                "description": "Type of machine learning problem"
+                              }
+                            }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }`
+        }
+      }]
+    });
+
+    // Create supervisor agent alias
+    const supervisorAgentAlias = new bedrock.CfnAgentAlias(this, 'SupervisorAgentAlias', {
+      agentAliasName: 'prod',
+      agentId: supervisorAgent.attrAgentId
+    });
+
+    // Add resource-based policy to allow Bedrock agents to invoke the functions
+    createFlowFunction.addPermission('BedrockDataAnalysisAgentInvokePermission', {
       principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
       action: 'lambda:InvokeFunction',
-      sourceArn: `arn:aws:bedrock:${this.region}:${this.account}:agent/${fraudDataTransformerAgent.attrAgentId}`
+      sourceArn: `arn:aws:bedrock:${this.region}:${this.account}:agent/${dataAnalysisAgent.attrAgentId}`
     });
 
-    // Kendra Index Role
-    const kendraIndexRole = new iam.Role(this, 'KendraIndexRole', {
-      assumedBy: new iam.ServicePrincipal('kendra.amazonaws.com'),
-      managedPolicies: [
-        iam.ManagedPolicy.fromAwsManagedPolicyName('CloudWatchLogsFullAccess')
-      ]
+    createFlowFunction.addPermission('BedrockSupervisorAgentInvokePermission', {
+      principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
+      action: 'lambda:InvokeFunction',
+      sourceArn: `arn:aws:bedrock:${this.region}:${this.account}:agent/${supervisorAgent.attrAgentId}`
     });
 
-    // Kendra Data Source Role
-    const kendraDataSourceRole = new iam.Role(this, 'KendraDataSourceRole', {
-      assumedBy: new iam.ServicePrincipal('kendra.amazonaws.com'),
-      managedPolicies: [
-        iam.ManagedPolicy.fromAwsManagedPolicyName('CloudWatchLogsFullAccess')
-      ]
+    processingFunction.addPermission('BedrockDataAnalysisAgentInvokePermission', {
+      principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
+      action: 'lambda:InvokeFunction',
+      sourceArn: `arn:aws:bedrock:${this.region}:${this.account}:agent/${dataAnalysisAgent.attrAgentId}`
     });
 
-    // Kendra Index
-    const fraudGithubIndex = new kendra.CfnIndex(this, 'FraudGithubIndex', {
-      name: 'fraudgithubindex',
-      edition: 'DEVELOPER_EDITION',
-      roleArn: kendraIndexRole.roleArn
+    processingFunction.addPermission('BedrockSupervisorAgentInvokePermission', {
+      principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
+      action: 'lambda:InvokeFunction',
+      sourceArn: `arn:aws:bedrock:${this.region}:${this.account}:agent/${supervisorAgent.attrAgentId}`
     });
 
-    // GitHub Data Source (Note: Full GitHub configuration may need to be done via AWS Console)
-    const githubDataSource = new kendra.CfnDataSource(this, 'GitHubDataSource', {
-      indexId: fraudGithubIndex.attrId,
-      name: 'GitHubSource',
-      type: 'GITHUB',
-      roleArn: kendraDataSourceRole.roleArn,
-      schedule: 'cron(0 0 ? * SUN *)'
+    // Update chat handler environment with agent IDs
+    chatHandler.addEnvironment('BEDROCK_AGENT_ID', supervisorAgent.attrAgentId);
+    chatHandler.addEnvironment('BEDROCK_AGENT_ALIAS_ID', supervisorAgentAlias.attrAgentAliasId);
+
+    // Create API Gateway resources and methods last
+    const apiResources = {
+      chat: this.api.root.addResource('chat'),
+      listFlow: this.api.root.addResource('list-flow-uri'),
+      listReports: this.api.root.addResource('list-report-uri'),
+      listS3: this.api.root.addResource('list-s3-uri')
+    };
+
+    // Add methods to resources
+    apiResources.chat.addMethod('POST', new apigateway.LambdaIntegration(chatHandler), {
+      authorizer: auth,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+      authorizationScopes: ['email', 'openid', 'phone', 'profile']
     });
 
+    apiResources.listFlow.addMethod('GET', new apigateway.LambdaIntegration(listFlowUriFunction), {
+      authorizer: auth,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+      authorizationScopes: ['email', 'openid', 'phone', 'profile']
+    });
+
+    apiResources.listReports.addMethod('GET', new apigateway.LambdaIntegration(listReportsUriFunction), {
+      authorizer: auth,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+      authorizationScopes: ['email', 'openid', 'phone', 'profile']
+    });
+
+    apiResources.listS3.addMethod('GET', new apigateway.LambdaIntegration(listS3UriFunction), {
+      authorizer: auth,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+      authorizationScopes: ['email', 'openid', 'phone', 'profile']
+    });
+
+    // Create API Gateway deployment and stage after all resources and methods are created
+    const deployment = new apigateway.Deployment(this, 'ChatbotApiDeployment', {
+      api: this.api
+    });
+
+    const stage = new apigateway.Stage(this, 'prod', {
+      deployment
+    });
+
+    this.api.deploymentStage = stage;
+
+    // CDK Outputs
+    new CfnOutput(this, 'UserPoolId', {
+      value: this.userPool.userPoolId,
+      description: 'Cognito User Pool ID'
+    });
+
+    new CfnOutput(this, 'UserPoolClientId', {
+      value: this.userPoolClient.userPoolClientId,
+      description: 'Cognito User Pool Client ID'
+    });
+
+    new CfnOutput(this, 'ApiUrl', {
+      value: this.api.url,
+      description: 'API Gateway URL'
+    });
+
+    new CfnOutput(this, 'Region', {
+      value: this.region,
+      description: 'AWS Region'
+    });
+
+    new CfnOutput(this, 'CognitoDomain', {
+      value: `https://${domain.domainName}.auth.${this.region}.amazoncognito.com`,
+      description: 'Cognito Domain URL'
+    });
   }
 }

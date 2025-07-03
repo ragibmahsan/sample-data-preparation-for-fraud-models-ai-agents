@@ -30,6 +30,7 @@ const getHeaders = (accessToken?: string) => {
     };
     
     if (accessToken) {
+        // Cognito tokens already include the Bearer prefix
         headers['Authorization'] = accessToken;
     }
     
@@ -38,9 +39,10 @@ const getHeaders = (accessToken?: string) => {
 
 export const listS3URIs = async (): Promise<string[]> => {
     try {
-        const response = await fetch(`${API_CONFIG.CHAT_ENDPOINT}/list-s3-uri`, {
+        const token = localStorage.getItem('auth_token') || undefined;
+        const response = await fetch(`${API_CONFIG.CHAT_ENDPOINT}list-s3-uri`, {
             method: 'GET',
-            headers: getHeaders()
+            headers: getHeaders(token)
         });
 
         if (!response.ok) {
@@ -57,9 +59,10 @@ export const listS3URIs = async (): Promise<string[]> => {
 
 export const listFlowURIs = async (): Promise<string[]> => {
     try {
-        const response = await fetch(`${API_CONFIG.CHAT_ENDPOINT}/list-flow-uri`, {
+        const token = localStorage.getItem('auth_token') || undefined;
+        const response = await fetch(`${API_CONFIG.CHAT_ENDPOINT}list-flow-uri`, {
             method: 'GET',
-            headers: getHeaders()
+            headers: getHeaders(token)
         });
 
         if (!response.ok) {
@@ -76,9 +79,10 @@ export const listFlowURIs = async (): Promise<string[]> => {
 
 export const listReportURIs = async (): Promise<string[]> => {
     try {
-        const response = await fetch(`${API_CONFIG.CHAT_ENDPOINT}/list-report-uri`, {
+        const token = localStorage.getItem('auth_token') || undefined;
+        const response = await fetch(`${API_CONFIG.CHAT_ENDPOINT}list-report-uri`, {
             method: 'GET',
-            headers: getHeaders()
+            headers: getHeaders(token)
         });
 
         if (!response.ok) {
@@ -98,7 +102,7 @@ export const sendMessage = async (message: string): Promise<ChatMessage> => {
         const token = localStorage.getItem('auth_token') || undefined;
         let sessionId = localStorage.getItem('bedrock_session_id');
         
-        const response = await fetch(API_CONFIG.CHAT_ENDPOINT + '/chat', {
+        const response = await fetch(API_CONFIG.CHAT_ENDPOINT + 'chat', {
             method: 'POST',
             headers: getHeaders(token),
             body: JSON.stringify({

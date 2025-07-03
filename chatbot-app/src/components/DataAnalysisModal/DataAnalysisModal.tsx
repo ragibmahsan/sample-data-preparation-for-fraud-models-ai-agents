@@ -6,13 +6,18 @@ interface DataAnalysisModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSubmit: (s3Uri: string, flowUri: string) => void;
+    onCreateFlowText: (text: string) => void;
+    mode?: 'flow' | 'report';
 }
 
-const DataAnalysisModal: React.FC<DataAnalysisModalProps> = ({ isOpen, onClose, onSubmit }) => {
+const DataAnalysisModal: React.FC<DataAnalysisModalProps> = ({ isOpen, onClose, onSubmit, onCreateFlowText, mode = 'report' }) => {
     const [s3URIs, setS3URIs] = useState<string[]>([]);
     const [flowURIs, setFlowURIs] = useState<string[]>([]);
     const [selectedS3URI, setSelectedS3URI] = useState<string>('');
     const [selectedFlowURI, setSelectedFlowURI] = useState<string>('');
+    const [outputPath, setOutputPath] = useState<string>('data_flow.flow');
+    const [targetColumn, setTargetColumn] = useState<string>('');
+    const [problemType, setProblemType] = useState<'Classification' | 'Regression'>('Classification');
     const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
@@ -61,7 +66,7 @@ const DataAnalysisModal: React.FC<DataAnalysisModalProps> = ({ isOpen, onClose, 
     return (
         <div className="modal-overlay">
             <div className="modal-content">
-                <h2>Data Analysis Configuration</h2>
+                <h2>{mode === 'flow' ? 'Create Flow Configuration' : 'Data Analysis Configuration'}</h2>
                 {isLoading ? (
                     <div>Loading...</div>
                 ) : (
@@ -81,28 +86,74 @@ const DataAnalysisModal: React.FC<DataAnalysisModalProps> = ({ isOpen, onClose, 
                                 ))}
                             </select>
                         </div>
+                        {mode === 'report' && (
+                            <div className="form-group">
+                                <label htmlFor="flow-uri">Flow URI:</label>
+                                <select
+                                    id="flow-uri"
+                                    value={selectedFlowURI}
+                                    onChange={(e) => setSelectedFlowURI(e.target.value)}
+                                    required
+                                >
+                                    {flowURIs.map((uri) => (
+                                        <option key={uri} value={uri}>
+                                            {uri}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
                         <div className="form-group">
-                            <label htmlFor="flow-uri">Flow URI:</label>
+                            <label htmlFor="output-path">Output S3 Path:</label>
+                            <input
+                                id="output-path"
+                                type="text"
+                                value={outputPath}
+                                onChange={(e) => setOutputPath(e.target.value)}
+                                placeholder="s3://bucket/output/path/"
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label htmlFor="target-column">Target Column:</label>
+                            <input
+                                id="target-column"
+                                type="text"
+                                value={targetColumn}
+                                onChange={(e) => setTargetColumn(e.target.value)}
+                                placeholder="e.g., is_fraud"
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label htmlFor="problem-type">Problem Type:</label>
                             <select
-                                id="flow-uri"
-                                value={selectedFlowURI}
-                                onChange={(e) => setSelectedFlowURI(e.target.value)}
-                                required
+                                id="problem-type"
+                                value={problemType}
+                                onChange={(e) => setProblemType(e.target.value as 'Classification' | 'Regression')}
                             >
-                                {flowURIs.map((uri) => (
-                                    <option key={uri} value={uri}>
-                                        {uri}
-                                    </option>
-                                ))}
+                                <option value="Classification">Classification</option>
+                                <option value="Regression">Regression</option>
                             </select>
                         </div>
                         <div className="modal-actions">
                             <button type="button" onClick={onClose}>
                                 Cancel
                             </button>
-                            <button type="submit">
-                                Create Analysis
-                            </button>
+                            {mode === 'flow' ? (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const text = `create flow from data in S3 uri ${selectedS3URI}, make the flow output to output_s3_path ${outputPath}, for target column ${targetColumn} and problem type ${problemType}`;
+                                        onCreateFlowText(text);
+                                        onClose();
+                                    }}
+                                >
+                                    Create Flow
+                                </button>
+                            ) : (
+                                <button type="submit">
+                                    Create Analysis
+                                </button>
+                            )}
                         </div>
                     </form>
                 )}

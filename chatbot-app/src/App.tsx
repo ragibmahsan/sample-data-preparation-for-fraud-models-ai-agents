@@ -9,6 +9,13 @@ import './App.css';
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const auth = useAuth();
 
+    // Store the access token when authenticated
+    React.useEffect(() => {
+        if (auth.user?.access_token) {
+            localStorage.setItem('auth_token', `Bearer ${auth.user.access_token}`);
+        }
+    }, [auth.user?.access_token]);
+
     if (auth.isLoading) {
         return <div>Loading...</div>;
     }

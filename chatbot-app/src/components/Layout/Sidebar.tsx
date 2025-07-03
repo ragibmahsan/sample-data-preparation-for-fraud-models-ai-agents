@@ -9,22 +9,27 @@ import './Sidebar.css';
 interface QuickAction {
     id: string;
     label: string;
-    type: 'data-analysis' | 'analyze-report' | 'data-transform';
+    type: 'create-flow' | 'data-analysis' | 'analyze-report' | 'data-transform';
 }
 
 const quickActions: QuickAction[] = [
     {
         id: '1',
+        label: 'Create Flow',
+        type: 'create-flow'
+    },
+    {
+        id: '2',
         label: 'Create Report',
         type: 'data-analysis'
     },
     {
-        id: '2',
+        id: '3',
         label: 'Analyze Report',
         type: 'analyze-report'
     },
     {
-        id: '3',
+        id: '4',
         label: 'Transform Data',
         type: 'data-transform'
     }
@@ -43,11 +48,17 @@ const Sidebar: React.FC = () => {
         window.location.href = `${cognitoDomain}/logout?client_id=${clientId}&logout_uri=${encodeURIComponent(logoutUri)}`;
     };
     const [showDataAnalysisModal, setShowDataAnalysisModal] = useState(false);
+    const [dataAnalysisMode, setDataAnalysisMode] = useState<'flow' | 'report'>('report');
     const [showAnalyzeReportModal, setShowAnalyzeReportModal] = useState(false);
     const [showDataTransformModal, setShowDataTransformModal] = useState(false);
+    const [message, setMessage] = useState('');
 
     const handleQuickAction = (action: QuickAction) => {
-        if (action.type === 'data-analysis') {
+        if (action.type === 'create-flow') {
+            setDataAnalysisMode('flow');
+            setShowDataAnalysisModal(true);
+        } else if (action.type === 'data-analysis') {
+            setDataAnalysisMode('report');
             setShowDataAnalysisModal(true);
         } else if (action.type === 'analyze-report') {
             setShowAnalyzeReportModal(true);
@@ -124,6 +135,20 @@ const Sidebar: React.FC = () => {
                 isOpen={showDataAnalysisModal}
                 onClose={() => setShowDataAnalysisModal(false)}
                 onSubmit={handleDataAnalysisSubmit}
+                onCreateFlowText={(text) => {
+                    navigate('/chat', {
+                        state: {
+                            quickAction: {
+                                type: 'Create Flow',
+                                data: {
+                                    message: text
+                                }
+                            }
+                        }
+                    });
+                    setShowDataAnalysisModal(false);
+                }}
+                mode={dataAnalysisMode}
             />
             <AnalyzeReportModal
                 isOpen={showAnalyzeReportModal}
