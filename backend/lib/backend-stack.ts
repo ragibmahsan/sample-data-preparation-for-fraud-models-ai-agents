@@ -279,8 +279,7 @@ export class BackendStack extends cdk.Stack {
         lambda.LayerVersion.fromLayerVersionArn(
           this,
           'PandasLayer',
-          `arn:aws:lambda:us-east-1:336392948345:layer:AWSSDKPandas-Python313:3
-`
+          'arn:aws:lambda:us-east-1:336392948345:layer:AWSSDKPandas-Python313:3'
         )
       ]
     });
@@ -342,7 +341,6 @@ export class BackendStack extends cdk.Stack {
       instruction: `You are an expert data scientist specializing in data quality analysis, feature engineering, and ML model development. Your role is to assist users with data analysis, quality assessment, and model improvement through advanced statistical techniques and machine learning best practices. You collaborate with the Supervisor Agent to ensure coordinated execution of complex workflows.`,
       idleSessionTtlInSeconds: 300,
       agentResourceRoleArn: bedrockDataAnalysisAgentRole.roleArn,
-      agentCollaboration: 'ENABLED',
       actionGroups: [{
         actionGroupName: 'flow_creation_actions',
         description: 'Create a fraud detection flow',
@@ -396,7 +394,6 @@ export class BackendStack extends cdk.Stack {
                     "content": {
                       "application/json": {
                           "schema": {
-                            "type": "object",
                             "required": ["input_s3_uri", "output_s3_path", "target_column", "problem_type"],
                             "properties": {
                               "input_s3_uri": {
@@ -428,7 +425,7 @@ export class BackendStack extends cdk.Stack {
         }
       },
       {
-        actionGroupName: 'data_analysis_actions',
+        actionGroupName: 'fraud_processing_job',
         description: 'Data analysis and processing actions',
         actionGroupExecutor: {
           lambda: processingFunction.functionArn
@@ -564,13 +561,13 @@ export class BackendStack extends cdk.Stack {
       agentName: 'SupervisorAgent',
       description: 'Supervisor agent for orchestrating data analysis',
       foundationModel: foundationModel,
+      agentCollaboration: 'SUPERVISOR',
       instruction: `You are a supervisor agent responsible for coordinating data analysis tasks. You work with the Data Analysis Agent to ensure proper execution of data processing and analysis workflows.`,
       idleSessionTtlInSeconds: 300,
       agentResourceRoleArn: bedrockSupervisorAgentRole.roleArn,
-      agentCollaboration: 'ENABLED',
       agentCollaborators: [{
         agentDescriptor: {
-          aliasArn: `arn:aws:bedrock:${this.region}:${this.account}:agent-alias/${dataAnalysisAgent.attrAgentId}/prod`
+              aliasArn: dataAnalysisAgentAlias.attrAgentAliasArn
         },
         collaborationInstruction: `Collaborate with the Data Analysis Agent for specialized tasks including:
                                     - Data quality analysis and validation
@@ -578,8 +575,7 @@ export class BackendStack extends cdk.Stack {
                                     - Model development and optimization
                                     - Statistical analysis and insights
                                     - Performance monitoring and improvement`,
-        collaboratorName: 'DataAnalysisAgent',
-        relayConversationHistory: 'ENABLED'
+        collaboratorName: 'DataAnalysisAgent'
       }],
       actionGroups: [{
         actionGroupName: 'flow_creation_actions',
@@ -677,25 +673,25 @@ export class BackendStack extends cdk.Stack {
     createFlowFunction.addPermission('BedrockDataAnalysisAgentInvokePermission', {
       principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
       action: 'lambda:InvokeFunction',
-      sourceArn: `arn:aws:bedrock:${this.region}:${this.account}:agent/${dataAnalysisAgent.attrAgentId}`
+      sourceArn: dataAnalysisAgent.attrAgentArn
     });
 
     createFlowFunction.addPermission('BedrockSupervisorAgentInvokePermission', {
       principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
       action: 'lambda:InvokeFunction',
-      sourceArn: `arn:aws:bedrock:${this.region}:${this.account}:agent/${supervisorAgent.attrAgentId}`
+      sourceArn: supervisorAgent.attrAgentArn
     });
 
     processingFunction.addPermission('BedrockDataAnalysisAgentInvokePermission', {
       principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
       action: 'lambda:InvokeFunction',
-      sourceArn: `arn:aws:bedrock:${this.region}:${this.account}:agent/${dataAnalysisAgent.attrAgentId}`
+      sourceArn: dataAnalysisAgent.attrAgentArn
     });
 
     processingFunction.addPermission('BedrockSupervisorAgentInvokePermission', {
       principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
       action: 'lambda:InvokeFunction',
-      sourceArn: `arn:aws:bedrock:${this.region}:${this.account}:agent/${supervisorAgent.attrAgentId}`
+      sourceArn: supervisorAgent.attrAgentArn
     });
 
     // Update chat handler environment with agent IDs

@@ -4,6 +4,7 @@ import { useAuth } from "react-oidc-context";
 import DataAnalysisModal from '../DataAnalysisModal/DataAnalysisModal';
 import AnalyzeReportModal from '../AnalyzeReportModal/AnalyzeReportModal';
 import DataTransformModal from '../DataTransformModal/DataTransformModal';
+import CreateFlowModal from '../CreateFlowModal/CreateFlowModal';
 import './Sidebar.css';
 
 interface QuickAction {
@@ -48,17 +49,15 @@ const Sidebar: React.FC = () => {
         window.location.href = `${cognitoDomain}/logout?client_id=${clientId}&logout_uri=${encodeURIComponent(logoutUri)}`;
     };
     const [showDataAnalysisModal, setShowDataAnalysisModal] = useState(false);
-    const [dataAnalysisMode, setDataAnalysisMode] = useState<'flow' | 'report'>('report');
     const [showAnalyzeReportModal, setShowAnalyzeReportModal] = useState(false);
     const [showDataTransformModal, setShowDataTransformModal] = useState(false);
+    const [showCreateFlowModal, setShowCreateFlowModal] = useState(false);
     const [message, setMessage] = useState('');
 
     const handleQuickAction = (action: QuickAction) => {
         if (action.type === 'create-flow') {
-            setDataAnalysisMode('flow');
-            setShowDataAnalysisModal(true);
+            setShowCreateFlowModal(true);
         } else if (action.type === 'data-analysis') {
-            setDataAnalysisMode('report');
             setShowDataAnalysisModal(true);
         } else if (action.type === 'analyze-report') {
             setShowAnalyzeReportModal(true);
@@ -135,7 +134,11 @@ const Sidebar: React.FC = () => {
                 isOpen={showDataAnalysisModal}
                 onClose={() => setShowDataAnalysisModal(false)}
                 onSubmit={handleDataAnalysisSubmit}
-                onCreateFlowText={(text) => {
+            />
+            <CreateFlowModal
+                isOpen={showCreateFlowModal}
+                onClose={() => setShowCreateFlowModal(false)}
+                onCreateFlow={(text) => {
                     navigate('/chat', {
                         state: {
                             quickAction: {
@@ -146,9 +149,8 @@ const Sidebar: React.FC = () => {
                             }
                         }
                     });
-                    setShowDataAnalysisModal(false);
+                    setShowCreateFlowModal(false);
                 }}
-                mode={dataAnalysisMode}
             />
             <AnalyzeReportModal
                 isOpen={showAnalyzeReportModal}
