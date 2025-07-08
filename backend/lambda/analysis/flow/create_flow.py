@@ -244,7 +244,7 @@ def lambda_handler(event, context):
                 "Missing required parameters: input_s3_uri, target_column, and problem_type are required")
 
         # Validate problem type
-        if problem_type not in ["Classification", "Regression"]:
+        if problem_type.lower() not in ["classification",  "regression"]:
             raise ValueError(
                 "problem_type must be either 'Classification' or 'Regression'")
 

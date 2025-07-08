@@ -92,13 +92,18 @@ const Sidebar: React.FC = () => {
         });
     };
 
-    const handleDataTransformSubmit = (inputS3Uri: string, outputS3Path: string) => {
+    const handleDataTransformSubmit = (inputS3Uri: string, outputS3Path: string, transformAction: string) => {
+        const message = `Please perform the following data transformation:
+Action: ${transformAction}
+Input: ${inputS3Uri}
+Output: ${outputS3Path}`;
+
         navigate('/chat', {
             state: {
                 quickAction: {
                     type: 'Transform Data',
                     data: {
-                        message: `Transform the data from input S3 URI ${inputS3Uri} and save the results to the output S3 uri ${outputS3Path}.`
+                        message: message
                     }
                 }
             }
