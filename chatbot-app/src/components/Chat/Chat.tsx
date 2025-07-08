@@ -20,7 +20,11 @@ const Chat: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const formRef = useRef<HTMLFormElement>(null);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
     const hasSubmitted = useRef(false);
+
+    // Calculate max height as 1/3 of viewport height
+    const maxHeight = Math.floor(window.innerHeight / 3);
 
     const handleSendMessage = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
@@ -35,6 +39,9 @@ const Chat: React.FC = () => {
 
         setMessages(prev => [...prev, userMessage]);
         setInputValue('');
+        if (textareaRef.current) {
+            textareaRef.current.style.height = 'auto';
+        }
         setIsLoading(true);
 
         try {
@@ -128,12 +135,14 @@ const Chat: React.FC = () => {
             </div>
             <form ref={formRef} onSubmit={handleSendMessage} className="chat-input-form">
                 <textarea
+                    ref={textareaRef}
                     value={inputValue}
                     onChange={(e) => {
                         setInputValue(e.target.value);
-                        // Auto-resize
+                        // Auto-resize with max height limit
                         e.target.style.height = 'auto';
-                        e.target.style.height = `${e.target.scrollHeight}px`;
+                        const scrollHeight = e.target.scrollHeight;
+                        e.target.style.height = `${Math.min(scrollHeight, maxHeight)}px`;
                     }}
                     onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) {

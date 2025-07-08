@@ -111,9 +111,8 @@
     border-radius: 0.5rem;
     font-size: 1rem;
     outline: none;
-    transition: border-color 0.2s, height 0.2s;
+    transition: border-color 0.2s, height 0.15s ease;
     resize: none;
-    max-height: 200px;
     overflow-y: auto;
     line-height: 1.5;
     min-height: 42px;
