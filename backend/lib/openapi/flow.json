@@ -1,0 +1,70 @@
+{
+"openapi": "3.0.0",
+"info": {
+    "title": "Fraud_Detection_Flow_API",
+    "version": "1.0.0"
+},
+"paths": {
+    "/create_flow": {
+    "post": {
+        "operationId": "create_flow",
+        "description": "Create a new fraud detection flow",
+        "responses": {
+        "200": {
+            "description": "Flow created successfully",
+            "content": {
+            "application/json": {
+                "schema": {
+                "type": "object",
+                "properties": {
+                    "flow_name": {
+                    "type": "string",
+                    "description": "Name of the created flow"
+                    },
+                    "s3_uri": {
+                    "type": "string",
+                    "description": "S3 URI of the created flow"
+                    },
+                    "status": {
+                    "type": "string",
+                    "description": "Status of the flow creation"
+                    },
+                    "message": {
+                    "type": "string",
+                    "description": "Result message"
+                    }
+                }
+                }
+            }
+            }
+        }
+        },
+        "requestBody": {
+        "required": true,
+        "content": {
+            "application/json": {
+                "schema": {
+                "required": ["input_s3_uri", "target_column", "problem_type"],
+                "properties": {
+                    "input_s3_uri": {
+                    "type": "string",
+                    "description": "S3 URI of the input data file"
+                    },
+                    "target_column": {
+                    "type": "string",
+                    "description": "Name of the target column for prediction"
+                    },
+                    "problem_type": {
+                    "type": "string",
+                    "enum": ["Classification", "Regression"],
+                    "description": "Type of machine learning problem"
+                    }
+                }
+            }
+            }
+        }
+        }
+    }
+    }
+}
+}

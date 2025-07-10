@@ -1,0 +1,43 @@
+openapi: 3.0.0
+info:
+  title: Fraud Detection Data Processing API
+  version: 1.0.0
+  description: API for processing fraud detection data
+paths:
+  /drop_columns:
+    post:
+      summary: Drop unnecessary columns from fraud detection dataset
+      description: This operation removes specified columns from the input CSV file and saves the result to the output location.
+      operationId: dropColumns
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - input_s3_path
+                - output_s3_path
+              properties:
+                input_s3_path:
+                  type: string
+                  description: S3 path to the input CSV file
+                output_s3_path:
+                  type: string
+                  description: S3 path where the processed CSV file will be saved
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                  body:
+                    type: string
+        '400':
+          description: Bad request
+        '500':
+          description: Internal server error
