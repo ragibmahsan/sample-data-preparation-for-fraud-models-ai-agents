@@ -3,7 +3,7 @@
 This solution provides a scalable financial fraud detection system powered by generative AI on AWS. It combines real-time transaction monitoring with advanced AI capabilities to detect and prevent fraudulent activities in financial transactions.
 
 # Architecture
-insert image.
+![Architecture Diagram](assets/fraudarch.png)
 
 ## Introduction
 
