@@ -1,93 +1,118 @@
-# scale-fsi-fraud-detection-gen-ai
+# FSI Fraud Detection with Generative AI
 
+This solution provides a scalable financial fraud detection system powered by generative AI on AWS. It combines real-time transaction monitoring with advanced AI capabilities to detect and prevent fraudulent activities in financial transactions.
 
+# Architecture
+insert image.
 
-## Getting started
+## Introduction
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+The FSI Fraud Detection solution leverages AWS services and generative AI to:
+- Process and analyze financial transactions in real-time
+- Detect potential fraudulent patterns using machine learning
+- Provide interactive fraud investigation capabilities through a React-based web interface
+- Secure access through AWS Cognito authentication
+- Deploy infrastructure as code using AWS CDK
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+## Prerequisites
 
-## Add your files
+Before deploying this solution, ensure you have the following:
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+1. **AWS Account Access**
+   - An AWS account with administrative permissions
+   - AWS CLI installed and configured with your credentials
 
+2. **Development Tools**
+   - Node.js 18.x or later
+   - npm 8.x or later
+   - AWS CDK CLI (can be installed via `npm install -g aws-cdk`)
+   - Git (for cloning the repository)
+
+3. **AWS Configuration**
+   - A default AWS region selected for deployment (us-east-1 recommended for Bedrock genAI index feature)
+   - Sufficient AWS service quotas for services like AWS Lambda, Amazon API Gateway, and Amazon Cognito
+
+## Deployment Instructions
+
+Follow these steps to deploy the solution in your AWS account:
+
+1. **Clone the Repository**
+   ```bash
+   git clone <repository-url>
+   cd scale-fsi-fraud-detection-gen-ai
+   ```
+
+2. **Install Dependencies**
+   ```bash
+   # Install backend dependencies
+   cd backend
+   npm install
+   ```
+
+3. **Deploy the Backend Stack**
+   ```bash
+   # Ensure you're in the backend directory
+   npm run build
+   cdk bootstrap <ACCOUNT_ID>/<AWS_REGION>
+   cdk synth
+   cdk deploy 
+   ```
+   During deployment, CDK will:
+   - Create necessary IAM roles and permissions
+   - Deploy Lambda functions
+   - Set up API Gateway endpoints
+   - Configure Cognito user pool
+   - Create required DynamoDB tables
+
+4. **Configure Environment Variables**
+   After the stack deployment completes, you'll receive various outputs from CloudFormation. Create a `.env` file in the project root with these values:
+   ```
+   REACT_APP_AWS_REGION=<your-region>
+   REACT_APP_COGNITO_USER_POOL_ID=<user-pool-id>
+   REACT_APP_COGNITO_CLIENT_ID=<client-id>
+   REACT_APP_COGNITO_DOMAIN=<cognito-domain>
+   REACT_APP_REDIRECT_SIGNIN=http://localhost:3000/
+   REACT_APP_REDIRECT_SIGNOUT=http://localhost:3000/
+   REACT_APP_API_GATEWAY_ENDPOINT=<api-gateway-url>
+   ```
+
+5. **Verify Deployment**
+   - Check the AWS Console to ensure all resources are created correctly
+   - Test the API Gateway endpoints using the provided URLs
+   - Verify Cognito user pool configuration
+
+## Post-Deployment Steps
+
+1. **Create Initial Admin User**
+   - Navigate to the AWS Cognito Console
+   - Select the user pool created by the stack
+   - Create a new user with admin privileges
+
+2. **Access the Application**
+   - Deploy the frontend application (see frontend deployment instructions)
+   - Use the Cognito credentials to log in
+   - Verify all functionality is working as expected
+
+## Cleanup
+
+To avoid incurring unnecessary AWS charges, you can remove the deployed resources:
+
+```bash
+cd backend
+cdk destroy
 ```
-cd existing_repo
-git remote add origin https://gitlab.aws.dev/leekit/scale-fsi-fraud-detection-gen-ai.git
-git branch -M main
-git push -uf origin main
-```
 
-## Integrate with your tools
+This will remove all AWS resources created by the stack.
 
-- [ ] [Set up project integrations](https://gitlab.aws.dev/leekit/scale-fsi-fraud-detection-gen-ai/-/settings/integrations)
+## Support and Contributing
 
-## Collaborate with your team
-
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+For support, please open an issue in the repository. Contributions are welcome! Please read our contributing guidelines before submitting pull requests.
 
 ## License
-For open source projects, say how it is licensed.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Authors
+
+- Ragib Ahsan, AWS Partner Solutions Architect
+- Keith Lee, AWS Partner Solutions Architect
