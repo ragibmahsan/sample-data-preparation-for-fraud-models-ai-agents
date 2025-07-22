@@ -83,13 +83,21 @@ Follow these steps to deploy the solution in your AWS account:
 
 ## Post-Deployment Steps
 
-1. **Create Initial Admin User**
+1. **Upload Initial Data Set**
+   - Navigate to the Amazon S3 Console
+   - Upload the demo_transactions_100k.csv file to the buckets input_data folder
+
+2. **Create Initial Admin User**
    - Navigate to the AWS Cognito Console
    - Select the user pool created by the stack
    - Create a new user with admin privileges
 
-2. **Access the Application**
-   - Deploy the frontend application (see frontend deployment instructions)
+3. **Access the Application**
+   ```bash
+   cd chatbot-app
+   npm start
+   ```
+
    - Use the Cognito credentials to log in
    - Verify all functionality is working as expected
 
