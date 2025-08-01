@@ -2,13 +2,23 @@ import json
 import boto3
 import os
 import logging
+from datetime import datetime
 
 # Set up logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # Initialize the Bedrock agent runtime client
-client = boto3.client('bedrock-agent-runtime', region_name='us-east-1')
+client = boto3.client('bedrock-agent-runtime')
+
+# Custom JSON encoder to handle datetime objects
+
+
+class DateTimeEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super(DateTimeEncoder, self).default(obj)
 
 
 def lambda_handler(event, context):
@@ -31,7 +41,8 @@ def lambda_handler(event, context):
                 'body': ''
             }
 
-        logger.info(f"Received event: {json.dumps(event)}")
+        logger.info(
+            f"Received event: {json.dumps(event, cls=DateTimeEncoder)}")
 
         # Get session ID from request or create new one
         body = json.loads(event['body'])
@@ -76,7 +87,7 @@ def lambda_handler(event, context):
                 logger.info(f"Received chunk: {data.decode('utf8')}")
             elif 'trace' in event:
                 logger.info("Trace event received.")
-                logger.info(json.dumps(event['trace']))
+                logger.info(json.dumps(event['trace'], cls=DateTimeEncoder))
             else:
                 logger.info(f"Unexpected event structure: {event}")
 
@@ -95,7 +106,7 @@ def lambda_handler(event, context):
             "body": json.dumps({
                 "content": final_answer,
                 "sessionId": session_id
-            })
+            }, cls=DateTimeEncoder)
         }
 
     except Exception as e:
@@ -111,5 +122,5 @@ def lambda_handler(event, context):
             "body": json.dumps({
                 "error": "Internal server error",
                 "message": str(e)
-            })
+            }, cls=DateTimeEncoder)
         }

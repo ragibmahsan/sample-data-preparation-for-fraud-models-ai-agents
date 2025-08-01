@@ -70,7 +70,7 @@ Follow these steps to deploy the solution in your AWS account:
    ```bash
    # Ensure you're in the backend directory
    npm run build
-   cdk bootstrap <ACCOUNT_ID>/<AWS_REGION>
+   cdk bootstrap
    cdk synth
    cdk deploy 
    ```
@@ -82,7 +82,7 @@ Follow these steps to deploy the solution in your AWS account:
    - Create required DynamoDB tables
 
 4. **Configure Environment Variables**
-   After the stack deployment completes, you'll receive various outputs from CloudFormation. Create a `.env` file in the project root with these values:
+   After the stack deployment completes, you'll receive various outputs from CloudFormation. Create a `.env` file in the chatbot directory with these values:
    ```
    REACT_APP_AWS_REGION=<your-region>
    REACT_APP_COGNITO_USER_POOL_ID=<user-pool-id>
@@ -112,6 +112,7 @@ Follow these steps to deploy the solution in your AWS account:
 3. **Access the Application**
    ```bash
    cd chatbot-app
+   npm install
    npm start
    ```
 
