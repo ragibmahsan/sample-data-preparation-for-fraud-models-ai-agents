@@ -83,7 +83,7 @@ export class BackendStack extends cdk.Stack {
     // Add Cognito Domain
     const domain = this.userPool.addDomain('ChatbotDomain', {
       cognitoDomain: {
-        domainPrefix: 'chatbot-fraud-detection'
+        domainPrefix: `chatbot-fraud-detection-${this.account}`
       }
     });
 
@@ -378,7 +378,6 @@ export class BackendStack extends cdk.Stack {
     const dataAnalysisAgentAlias = new bedrock.AgentAlias(this, 'DataAnalysisAgentAlias', {
       aliasName: 'prod',
       agent: dataAnalysisAgent,
-      agentVersion: '1',
       description: 'Production alias for Data Analysis Agent',
     });
 
@@ -401,7 +400,6 @@ export class BackendStack extends cdk.Stack {
     const supervisorAgentAlias = new bedrock.AgentAlias(this, 'SupervisorAgentAlias', {
       aliasName: 'prod',
       agent: supervisorAgent,
-      agentVersion: '1',
       description: 'Production alias for Supervisor Agent',
     });
     
