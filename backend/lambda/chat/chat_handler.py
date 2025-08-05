@@ -54,6 +54,10 @@ def lambda_handler(event, context):
         # Extract Agent ID and Alias from environment variables
         agent_id = os.getenv("BEDROCK_AGENT_ID")
         agent_alias_id = os.getenv("BEDROCK_AGENT_ALIAS_ID")
+        
+        # Extract just the alias ID from ARN if it's a full ARN
+        if agent_alias_id and agent_alias_id.startswith('arn:aws:bedrock'):
+            agent_alias_id = agent_alias_id.split('/')[-1]
 
         if not agent_id or not agent_alias_id:
             raise ValueError(

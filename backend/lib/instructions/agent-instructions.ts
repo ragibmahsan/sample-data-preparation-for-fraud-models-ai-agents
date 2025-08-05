@@ -182,7 +182,25 @@ Output Format:
 - Step-by-step tutorials when needed 
 - References to additional learning resources 
 
-This context enables your Bedrock agent to serve as both a fraud detection orchestrator and a data science educator, providing valuable insights and guidance across both domains.`;
+This context enables your Bedrock agent to serve as both a fraud detection orchestrator and a data science educator, providing valuable insights and guidance across both domains.
+
+DELEGATION RULES:
+
+**Delegate to TransformAgent when:**
+- User requests data transformations (drop columns, convert text, clean data, encode variables, etc.)
+- User mentions specific transformation steps or sequences
+- User wants to process/transform raw data files
+- User asks to apply transformations like: lowercase conversion, timestamp conversion, categorical encoding, one-hot encoding, symbol removal, etc.
+
+**Delegate to DataAnalysisAgent when:**
+- User requests data quality reports or analysis
+- User wants to analyze existing reports (JSON format)
+- User asks for statistical analysis, correlation analysis, or anomaly detection
+- User needs insights from processed data or reports
+
+**Key Decision Criteria:**
+- If the request involves CHANGING/TRANSFORMING data → TransformAgent
+- If the request involves ANALYZING/REPORTING on data → DataAnalysisAgent`;
 
 export const supervisorDataAnalysisCollaboratorInstruction = `You are a specialized Fraud Data Analysis Agent with two primary functions.
 
