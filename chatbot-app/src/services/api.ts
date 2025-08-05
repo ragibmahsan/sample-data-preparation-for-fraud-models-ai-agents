@@ -28,12 +28,12 @@ const getHeaders = (accessToken?: string) => {
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
     };
-    
+
     if (accessToken) {
         // Cognito tokens already include the Bearer prefix
         headers['Authorization'] = accessToken;
     }
-    
+
     return headers;
 };
 
@@ -101,7 +101,7 @@ export const sendMessage = async (message: string): Promise<ChatMessage> => {
     try {
         const token = localStorage.getItem('auth_token') || undefined;
         let sessionId = localStorage.getItem('bedrock_session_id');
-        
+
         const response = await fetch(API_CONFIG.CHAT_ENDPOINT + 'chat', {
             method: 'POST',
             headers: getHeaders(token),
@@ -116,7 +116,7 @@ export const sendMessage = async (message: string): Promise<ChatMessage> => {
         if (!response.ok) {
             // Extract error details from various possible response formats
             let errorMessage = 'An error occurred';
-            
+
             if (data?.response?.responseBody?.['application/json']?.body?.error) {
                 errorMessage = data.response.responseBody['application/json'].body.error;
             } else if (data?.response?.responseBody?.TEXT?.body) {

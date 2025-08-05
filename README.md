@@ -46,8 +46,7 @@ Before deploying this solution, ensure you have the following:
    - Git (for cloning the repository)
 
 3. **AWS Configuration**
-   - A default AWS region selected for deployment (us-east-1 recommended for Bedrock genAI index feature)
-   - Sufficient AWS service quotas for services like AWS Lambda, Amazon API Gateway, and Amazon Cognito
+   - Code currently only supports us-east-1
 
 ## Deployment Instructions
 
@@ -69,8 +68,7 @@ Follow these steps to deploy the solution in your AWS account:
 3. **Deploy the Backend Stack**
    ```bash
    # Ensure you're in the backend directory
-   npm run build
-   cdk bootstrap <ACCOUNT_ID>/<AWS_REGION>
+   cdk bootstrap
    cdk synth
    cdk deploy 
    ```
@@ -82,9 +80,9 @@ Follow these steps to deploy the solution in your AWS account:
    - Create required DynamoDB tables
 
 4. **Configure Environment Variables**
-   After the stack deployment completes, you'll receive various outputs from CloudFormation. Create a `.env` file in the project root with these values:
+   After the stack deployment completes, you'll receive various outputs from CloudFormation. Create a `.env` file in the chatbot directory with these values:
    ```
-   REACT_APP_AWS_REGION=<your-region>
+   REACT_APP_AWS_REGION=us-east-1
    REACT_APP_COGNITO_USER_POOL_ID=<user-pool-id>
    REACT_APP_COGNITO_CLIENT_ID=<client-id>
    REACT_APP_COGNITO_DOMAIN=<cognito-domain>
@@ -100,22 +98,15 @@ Follow these steps to deploy the solution in your AWS account:
 
 ## Post-Deployment Steps
 
-1. **Upload Initial Data Set**
-   - Navigate to the Amazon S3 Console
-   - Upload the demo_transactions_100k.csv file to the buckets input_data folder
 
-2. **Create Initial Admin User**
-   - Navigate to the AWS Cognito Console
-   - Select the user pool created by the stack
-   - Create a new user with admin privileges
-
-3. **Access the Application**
+1. **Access the Application**
    ```bash
    cd chatbot-app
+   npm install
    npm start
    ```
 
-   - Use the Cognito credentials to log in
+   - Create user on sign up
    - Verify all functionality is working as expected
 
 ## Cleanup
@@ -127,7 +118,7 @@ cd backend
 cdk destroy
 ```
 
-This will remove all AWS resources created by the stack.
+Double check that all resources have been destroyed especially the S3 bucket.
 
 ## Support and Contributing
 

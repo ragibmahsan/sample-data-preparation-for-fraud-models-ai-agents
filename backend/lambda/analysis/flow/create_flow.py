@@ -244,9 +244,13 @@ def lambda_handler(event, context):
                 "Missing required parameters: input_s3_uri, target_column, and problem_type are required")
 
         # Validate problem type
-        if problem_type.lower() not in ["classification",  "regression"]:
+        if problem_type.lower() not in ["classification", "regression"]:
             raise ValueError(
                 "problem_type must be either 'Classification' or 'Regression'")
+
+        # Standardize problem_type to match SageMaker's expected format
+        # Convert to title case (e.g., "classification" -> "Classification")
+        problem_type = problem_type.lower().title()
 
         # Generate timestamp for unique flow name
         timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
