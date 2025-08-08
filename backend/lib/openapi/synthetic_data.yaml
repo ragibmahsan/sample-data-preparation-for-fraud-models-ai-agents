@@ -1,0 +1,38 @@
+openapi: 3.0.0
+info:
+  title: Fraud Detection Synthetic Data Generator
+  version: 1.0.0
+  description: API for generating synthetic fraud detection transaction data
+paths:
+  /generate_synthetic_data:
+    post:
+      summary: Generate synthetic fraud transaction data
+      description: Creates synthetic transaction data with specified fraud ratio
+      operationId: generateSyntheticData
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - output_s3_path
+                - num_records
+                - fraud_ratio
+              properties:
+                output_s3_path:
+                  type: string
+                  description: S3 path where the synthetic data will be saved
+                num_records:
+                  type: integer
+                  description: Number of records to generate
+                fraud_ratio:
+                  type: number
+                  description: Ratio of fraudulent transactions (0.0 to 1.0)
+      responses:
+        '200':
+          description: Successful operation
+        '400':
+          description: Bad request
+        '500':
+          description: Internal server error

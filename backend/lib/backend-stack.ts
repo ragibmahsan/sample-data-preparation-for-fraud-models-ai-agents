@@ -146,6 +146,11 @@ export class BackendStack extends cdk.Stack {
             }).stringValue
         );
 
+        // Layer for synthetic fraud transanction data generation
+        const syntheticDataLayer = new lambda.LayerVersion(this, 'syntheticdata', {
+          code: lambda.Code.fromAsset(path.join(__dirname, '../lib/layers/fraud_detection_layer.zip'))
+        });
+
         /*
         Lambda Functions
     */
@@ -203,7 +208,7 @@ export class BackendStack extends cdk.Stack {
             timeout: cdk.Duration.minutes(5)
         });
 
-        // Functions called by Data Analyst Agent
+        // Functions called by Data Analysis Agent
         const processingFunction = new lambda.Function(this, 'ProcessingFunction', {
             functionName: 'fraud-processing',
             runtime: lambda.Runtime.PYTHON_3_13,
@@ -255,6 +260,26 @@ export class BackendStack extends cdk.Stack {
         });
 
         // Functions called by Transformer Agent
+        const syntheticDataFunction = new lambda.Function(this, 'SyntheticDataFunction', {
+            functionName: 'fraud-synthetic-data',
+            runtime: lambda.Runtime.PYTHON_3_13,
+            handler: 'lambda_function.lambda_handler',
+            code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/transform/synthetic')),
+            layers: [syntheticDataLayer],
+            role: fraudTransformLambdaRole,
+            timeout: cdk.Duration.minutes(5),
+            memorySize: 10240,
+            ephemeralStorageSize: cdk.Size.gibibytes(10)
+        });
+
+        const syntheticDataActionGroup = new AgentActionGroup({
+            name: 'fraud_synthetic_data',
+            description: 'Generate synthetic fraud transaction data',
+            executor: bedrock.ActionGroupExecutor.fromlambdaFunction(syntheticDataFunction),
+            enabled: true,
+            apiSchema: bedrock.ApiSchema.fromLocalAsset(path.join(__dirname, '../lib/openapi/synthetic_data.yaml')),
+        });
+
         const dropcolumnsfunction = new lambda.Function(this, 'DropColumnsFunction', {
             functionName: "drop_columns",
             description: "Drop Columns Lambda Function",
@@ -487,6 +512,13 @@ export class BackendStack extends cdk.Stack {
             description: 'Production alias for Transform Agent'
         });
         transformAgentAlias.node.addDependency(transformAgent);
+
+        syntheticDataFunction.addPermission('BedrockTransformAgentInvokePermission', {
+            principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
+            action: 'lambda:InvokeFunction',
+            sourceArn: transformAgent.agentArn
+        });
+        transformAgent.addActionGroup(syntheticDataActionGroup);
 
         categorical2ordfunction.addPermission('BedrockTransformAgentInvokePermission', {
             principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
