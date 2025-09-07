@@ -12,7 +12,8 @@ module.exports = {
         '**/node_modules/**',
         '**/*.d.ts',
         '**/build/**',
-        '**/dist/**'
+        '**/dist/**',
+        'chatbot-app/**'
     ],
     rules: {
         // Common spacing rules for all projects
