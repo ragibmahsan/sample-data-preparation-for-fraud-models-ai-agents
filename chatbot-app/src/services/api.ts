@@ -123,7 +123,7 @@ export const sendMessage = async (message: string): Promise<ChatMessage> => {
                 try {
                     const bodyJson = JSON.parse(data.response.responseBody.TEXT.body);
                     errorMessage = bodyJson.error || bodyJson.message || errorMessage;
-                } catch (e) {
+                } catch {
                     errorMessage = data.response.responseBody.TEXT.body;
                 }
             } else if (data?.message) {

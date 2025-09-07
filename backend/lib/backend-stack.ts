@@ -148,12 +148,12 @@ export class BackendStack extends cdk.Stack {
 
         // Layer for synthetic fraud transanction data generation
         const syntheticDataLayer = new lambda.LayerVersion(this, 'syntheticdata', {
-          code: lambda.Code.fromAsset(path.join(__dirname, '../lib/layers/fraud_detection_layer.zip'))
+            code: lambda.Code.fromAsset(path.join(__dirname, '../lib/layers/fraud_detection_layer.zip'))
         });
 
         /*
         Lambda Functions
-    */
+        */
         // Functions called by API Gateway
         const listFlowUriFunction = new lambda.Function(this, 'ListFlowUriFunction', {
             functionName: 'fraud-list-flow-uri',

@@ -52,7 +52,6 @@ const Sidebar: React.FC = () => {
     const [showAnalyzeReportModal, setShowAnalyzeReportModal] = useState(false);
     const [showDataTransformModal, setShowDataTransformModal] = useState(false);
     const [showCreateFlowModal, setShowCreateFlowModal] = useState(false);
-    const [message, setMessage] = useState('');
 
     const handleQuickAction = (action: QuickAction) => {
         if (action.type === 'create-flow') {

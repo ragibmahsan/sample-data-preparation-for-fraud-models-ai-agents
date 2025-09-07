@@ -78,7 +78,7 @@ const Chat: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [inputValue, isLoading]);
+    }, [inputValue, isLoading, auth.user?.access_token]);
 
     useEffect(() => {
         // Reset hasSubmitted when location changes
