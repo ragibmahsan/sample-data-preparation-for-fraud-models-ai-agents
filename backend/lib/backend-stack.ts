@@ -35,13 +35,28 @@ export class BackendStack extends cdk.Stack {
         /*
         Create S3 Bucket
     */
+        // Create a separate bucket for access logs to follow security best practices
+        const accessLogsBucket = new s3.Bucket(this, 'FraudDetectionAccessLogsBucket', {
+            bucketName: `fraud-detection-access-logs-${this.account}-${this.region}`,
+            versioned: false,
+            encryption: s3.BucketEncryption.S3_MANAGED,
+            blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+            enforceSSL: true,
+            lifecycleRules: [{
+                id: 'DeleteOldAccessLogs',
+                enabled: true,
+                expiration: cdk.Duration.days(90), // Delete access logs after 90 days
+            }]
+        });
+
         this.bucket = new s3.Bucket(this, 'FraudDetectionBucket', {
             bucketName: `fraud-detection-${this.account}-${this.region}`,
             versioned: false,
             encryption: s3.BucketEncryption.S3_MANAGED,
             blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
             enforceSSL: true,
-            serverAccessLogsPrefix: 'access-logs/',
+            serverAccessLogsBucket: accessLogsBucket,
+            serverAccessLogsPrefix: 'fraud-detection-bucket-logs/',
         });
 
         new s3deploy.BucketDeployment(this, 'CreateInputDataFolder', {

@@ -18,7 +18,14 @@ const root = ReactDOM.createRoot(
 );
 root.render(
     <React.StrictMode>
-        <AuthProvider {...cognitoAuthConfig}>
+        <AuthProvider
+            authority={cognitoAuthConfig.authority}
+            client_id={cognitoAuthConfig.client_id}
+            redirect_uri={cognitoAuthConfig.redirect_uri}
+            post_logout_redirect_uri={cognitoAuthConfig.post_logout_redirect_uri}
+            response_type={cognitoAuthConfig.response_type}
+            scope={cognitoAuthConfig.scope}
+        >
             <App />
         </AuthProvider>
     </React.StrictMode>
