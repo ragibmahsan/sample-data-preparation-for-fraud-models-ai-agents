@@ -15,11 +15,11 @@ import { supervisorInstruction, dataAnalysisAgentInstruction, transformAgentInst
 
 /**
  * Ensure that you have enabled access to foundational model
- * Using the US region on-demand version of Claude 3.7 Sonnet
+ * Using the US region on-demand version of Claude 3.7
 */
 const foundationModel = bedrock.CrossRegionInferenceProfile.fromConfig({
     geoRegion: bedrock.CrossRegionInferenceProfileRegion.US,
-    model: bedrock.BedrockFoundationModel.AMAZON_NOVA_MICRO_V1
+    model: bedrock.BedrockFoundationModel.ANTHROPIC_CLAUDE_3_7_SONNET_V1_0
 })
 
 
@@ -40,6 +40,8 @@ export class BackendStack extends cdk.Stack {
             versioned: false,
             encryption: s3.BucketEncryption.S3_MANAGED,
             blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+            enforceSSL: true,
+            serverAccessLogsPrefix: 'access-logs/',
         });
 
         new s3deploy.BucketDeployment(this, 'CreateInputDataFolder', {
@@ -228,10 +230,10 @@ export class BackendStack extends cdk.Stack {
 
         const processingFunc = new AgentActionGroup({
             name: 'fraud_processing_job',
-            description: 'Data analysis and processing actions',
+            description: 'Execute SageMaker Data Wrangler processing jobs and analyze reports for fraud detection data quality insights.',
             executor: bedrock.ActionGroupExecutor.fromlambdaFunction(processingFunction),
             enabled: true,
-            apiSchema: bedrock.ApiSchema.fromLocalAsset(path.join(__dirname, '../lib/openapi/processing.json'))
+            apiSchema: bedrock.ApiSchema.fromLocalAsset(path.join(__dirname, '../lib/openapi/processing.yaml'))
         })
 
         const createFlowFunction = new lambda.Function(this, 'CreateFlowFunction', {
@@ -253,10 +255,10 @@ export class BackendStack extends cdk.Stack {
 
         const flowFunction = new AgentActionGroup({
             name: 'flow_creation_actions',
-            description: 'Create a fraud detection flow',
+            description: 'Create SageMaker Data Wrangler flow files for fraud detection. Use when user asks to create, make, or generate a flow.',
             executor: bedrock.ActionGroupExecutor.fromlambdaFunction(createFlowFunction),
             enabled: true,
-            apiSchema: bedrock.ApiSchema.fromLocalAsset(path.join(__dirname, '../lib/openapi/flow.json')),
+            apiSchema: bedrock.ApiSchema.fromLocalAsset(path.join(__dirname, '../lib/openapi/flow.yaml')),
         });
 
         // Functions called by Transformer Agent

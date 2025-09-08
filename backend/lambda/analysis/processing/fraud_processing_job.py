@@ -28,7 +28,7 @@ def read_report_json(s3_uri):
         json_content = response['Body'].read().decode('utf-8')
         return json.loads(json_content)
     except Exception as e:
-        logger.error(f"Error reading report JSON from S3: {str(e)}")
+        logger.warning(f"Error reading report JSON from S3: {str(e)}")
         raise
 
 
@@ -156,7 +156,7 @@ def process_fraud_detection(flow_s3_uri, transactions_s3_uri):
         }
 
     except Exception as e:
-        logger.error(f"Error in process_fraud_detection: {str(e)}")
+        logger.warning(f"Error in process_fraud_detection: {str(e)}")
         raise
 
 
