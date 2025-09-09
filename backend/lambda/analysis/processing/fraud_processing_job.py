@@ -215,7 +215,7 @@ def lambda_handler(event, context):
         # Add informative message to result
         result_with_message = {
             **result,
-            'message': 'Analysis completed successfully.' if 'reportUri' in result else 'Data quality insight job is now running. This process can take up to 2 hours to complete. You can check the job status using the provided jobName.'
+            'message': 'Analysis completed successfully.' if 'reportUri' in result else 'Data quality insight job is now running.'
         }
 
         # Format response to match Bedrock agent's OpenAPI schema

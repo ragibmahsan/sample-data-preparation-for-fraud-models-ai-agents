@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
-import { sendMessage } from '../../services/api';
+import { sendMessageViaWebSocket, disconnectWebSocket } from '../../services/api';
 import { useAuth } from 'react-oidc-context';
 import ReactMarkdown from 'react-markdown';
 import './Chat.css';
@@ -23,8 +23,8 @@ const Chat: React.FC = () => {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const hasSubmitted = useRef(false);
 
-    // Calculate max height as 1/3 of viewport height
-    const maxHeight = Math.floor(window.innerHeight / 3);
+    // Max height for more rows of text
+    const maxHeight = 200;
 
     const handleSendMessage = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
@@ -38,11 +38,23 @@ const Chat: React.FC = () => {
         };
 
         setMessages(prev => [...prev, userMessage]);
+        const messageToSend = inputValue.trim();
         setInputValue('');
         if (textareaRef.current) {
             textareaRef.current.style.height = 'auto';
         }
         setIsLoading(true);
+
+        // Create a bot message that will be updated with streaming content
+        const botMessageId = (Date.now() + 1).toString();
+        const initialBotMessage: Message = {
+            id: botMessageId,
+            content: '',
+            sender: 'bot',
+            timestamp: new Date()
+        };
+
+        setMessages(prev => [...prev, initialBotMessage]);
 
         try {
             // Store the access token in localStorage for API calls
@@ -50,35 +62,69 @@ const Chat: React.FC = () => {
                 localStorage.setItem('auth_token', `Bearer ${auth.user.access_token}`);
             }
 
-            const response = await sendMessage(inputValue.trim());
-
-            // Check if response contains error message
-            if (response.content.toLowerCase().includes('error')) {
-                setMessages(prev => [...prev, {
-                    ...response,
-                    content: response.content.includes('Bedrock') ?
-                        response.content : // Keep the full message if it mentions Bedrock
-                        response.content + '\n\n: Please try again'
-                }]);
-            } else {
-                setMessages(prev => [...prev, response]);
-            }
-        } catch (error) {
-            console.error('Error sending message:', error);
-            const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
-            setMessages(prev => [
-                ...prev,
-                {
-                    id: Date.now().toString(),
-                    content: `${errorMessage}\n\nPlease wait a few seconds and try again, as the Bedrock agent may need time to process.`,
-                    sender: 'bot',
-                    timestamp: new Date()
+            // Use WebSocket for streaming responses
+            await sendMessageViaWebSocket(
+                messageToSend,
+                // onChunk: Update the bot message with each chunk
+                (chunk: string) => {
+                    setMessages(prev => prev.map(msg =>
+                        msg.id === botMessageId
+                            ? { ...msg, content: msg.content + chunk }
+                            : msg
+                    ));
+                },
+                // onComplete: Final message received
+                (fullMessage: string, sessionId?: string) => {
+                    setMessages(prev => prev.map(msg =>
+                        msg.id === botMessageId
+                            ? { ...msg, content: fullMessage }
+                            : msg
+                    ));
+                    console.log('Message completed:', { fullMessage, sessionId });
+                },
+                // onError: Handle errors
+                (error: string) => {
+                    setMessages(prev => prev.map(msg =>
+                        msg.id === botMessageId
+                            ? {
+                                ...msg,
+                                content: `Error: ${error}\n\nPlease try again. If the problem persists, the system may be processing other requests.`
+                            }
+                            : msg
+                    ));
+                },
+                // onStatus: Handle status updates (optional)
+                (status: string) => {
+                    setMessages(prev => prev.map(msg =>
+                        msg.id === botMessageId
+                            ? { ...msg, content: `${status}...` }
+                            : msg
+                    ));
                 }
-            ]);
+            );
+
+        } catch (error) {
+            console.error('Error sending message via WebSocket:', error);
+            const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
+
+            setMessages(prev => prev.map(msg =>
+                msg.id === botMessageId
+                    ? {
+                        ...msg,
+                        content: `Error: ${errorMessage}\n\nPlease wait a few seconds and try again, as the system may need time to process.`
+                    }
+                    : msg
+            ));
         } finally {
             setIsLoading(false);
         }
     }, [inputValue, isLoading, auth.user?.access_token]);
+    // Cleanup WebSocket connection when component unmounts
+    useEffect(() => {
+        return () => {
+            disconnectWebSocket();
+        };
+    }, []);
 
     useEffect(() => {
         // Reset hasSubmitted when location changes

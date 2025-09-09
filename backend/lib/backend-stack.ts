@@ -7,7 +7,8 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as path from 'path';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
-import * as apigateway from 'aws-cdk-lib/aws-apigateway';
+import * as apigatewayv2 from 'aws-cdk-lib/aws-apigatewayv2';
+import * as apigatewayv2Integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import { bedrock } from '@cdklabs/generative-ai-cdk-constructs';
 // import { kendra } from '@cdklabs/generative-ai-cdk-constructs';
 import { Agent, AgentActionGroup, AgentCollaboratorType } from '@cdklabs/generative-ai-cdk-constructs/lib/cdk-lib/bedrock';
@@ -26,7 +27,6 @@ const foundationModel = bedrock.CrossRegionInferenceProfile.fromConfig({
 export class BackendStack extends cdk.Stack {
     public readonly userPool: cognito.UserPool;
     public readonly userPoolClient: cognito.UserPoolClient;
-    public readonly api: apigateway.RestApi;
     public readonly bucket: s3.Bucket;
 
     constructor(scope: cdk.App, id: string, props?: cdk.StackProps) {
@@ -129,22 +129,6 @@ export class BackendStack extends cdk.Stack {
             })
         );
 
-        const chatHandlerRole = new iam.Role(this, 'ChatHandlerRole', {
-            assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
-            managedPolicies: [
-                iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole')
-            ]
-        });
-
-        chatHandlerRole.addToPolicy(
-            new iam.PolicyStatement({
-                effect: iam.Effect.ALLOW,
-                actions: [
-                    'bedrock:*'
-                ],
-                resources: ['*']
-            })
-        );
 
         const fraudTransformLambdaRole = new iam.Role(this, 'FraudTransformLambdaRole', {
             assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
@@ -171,8 +155,8 @@ export class BackendStack extends cdk.Stack {
         /*
         Lambda Functions
         */
-        // Functions called by API Gateway
-        const listFlowUriFunction = new lambda.Function(this, 'ListFlowUriFunction', {
+        // List functions - called by WebSocket message handler
+        new lambda.Function(this, 'ListFlowUriFunction', {
             functionName: 'fraud-list-flow-uri',
             runtime: lambda.Runtime.PYTHON_3_13,
             handler: 'list_flow_uri.lambda_handler',
@@ -185,7 +169,7 @@ export class BackendStack extends cdk.Stack {
             timeout: cdk.Duration.minutes(1)
         });
 
-        const listReportsUriFunction = new lambda.Function(this, 'ListReportsUriFunction', {
+        new lambda.Function(this, 'ListReportsUriFunction', {
             functionName: 'fraud-list-reports-uri',
             runtime: lambda.Runtime.PYTHON_3_13,
             handler: 'list_reports_uri.lambda_handler',
@@ -198,7 +182,7 @@ export class BackendStack extends cdk.Stack {
             timeout: cdk.Duration.minutes(1)
         });
 
-        const listS3UriFunction = new lambda.Function(this, 'ListS3UriFunction', {
+        new lambda.Function(this, 'ListS3UriFunction', {
             functionName: 'fraud-list-s3-uri',
             runtime: lambda.Runtime.PYTHON_3_13,
             handler: 'list_s3_uri.lambda_handler',
@@ -211,19 +195,6 @@ export class BackendStack extends cdk.Stack {
             timeout: cdk.Duration.minutes(1)
         });
 
-        const chatHandler = new lambda.Function(this, 'ChatHandler', {
-            functionName: 'fraud-chat-handler',
-            runtime: lambda.Runtime.PYTHON_3_13,
-            handler: 'chat_handler.lambda_handler',
-            code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/chat')),
-            role: chatHandlerRole,
-            environment: {
-                ENABLE_DEBUG: 'true',
-                BEDROCK_AGENT_ID: '',  // Will be updated after supervisor agent is created
-                BEDROCK_AGENT_ALIAS_ID: ''  // Will be updated after supervisor agent alias is created
-            },
-            timeout: cdk.Duration.minutes(5)
-        });
 
         // Functions called by Data Analysis Agent
         const processingFunction = new lambda.Function(this, 'ProcessingFunction', {
@@ -628,8 +599,6 @@ export class BackendStack extends cdk.Stack {
         });
         supervisorAgentAlias.node.addDependency(supervisorAgent);
 
-        chatHandler.addEnvironment('BEDROCK_AGENT_ID', supervisorAgent.agentId);
-        chatHandler.addEnvironment('BEDROCK_AGENT_ALIAS_ID', supervisorAgentAlias.aliasId);
 
         /*
         Authentication
@@ -694,68 +663,140 @@ export class BackendStack extends cdk.Stack {
         });
 
         /*
-        API Gateway + Integration with Cognito
-    */
-        this.api = new apigateway.RestApi(this, 'ChatbotApi', {
-            restApiName: 'Chatbot API',
-            defaultCorsPreflightOptions: {
-                allowOrigins: apigateway.Cors.ALL_ORIGINS,
-                allowMethods: apigateway.Cors.ALL_METHODS,
-                allowHeaders: [
-                    'Content-Type',
-                    'Authorization'
-                ]
+        REST API Gateway Removed - Using WebSocket API Only
+        List functions will be accessible through WebSocket API with special message types
+        */
+
+        /*
+        WebSocket API Gateway + Lambda Functions for Streaming Chat
+        */
+
+        // WebSocket Lambda Role with API Gateway management permissions
+        const webSocketLambdaRole = new iam.Role(this, 'WebSocketLambdaRole', {
+            assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+            managedPolicies: [
+                iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole')
+            ]
+        });
+
+        webSocketLambdaRole.addToPolicy(
+            new iam.PolicyStatement({
+                effect: iam.Effect.ALLOW,
+                actions: [
+                    'execute-api:ManageConnections'
+                ],
+                resources: ['*']
+            })
+        );
+
+        webSocketLambdaRole.addToPolicy(
+            new iam.PolicyStatement({
+                effect: iam.Effect.ALLOW,
+                actions: [
+                    'lambda:InvokeFunction'
+                ],
+                resources: ['*']
+            })
+        );
+
+        webSocketLambdaRole.addToPolicy(
+            new iam.PolicyStatement({
+                effect: iam.Effect.ALLOW,
+                actions: [
+                    'bedrock:*'
+                ],
+                resources: ['*']
+            })
+        );
+
+        // WebSocket Connect Handler
+        const webSocketConnectHandler = new lambda.Function(this, 'WebSocketConnectHandler', {
+            functionName: 'fraud-websocket-connect',
+            runtime: lambda.Runtime.PYTHON_3_13,
+            handler: 'connect_handler.lambda_handler',
+            code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/websocket')),
+            role: webSocketLambdaRole,
+            timeout: cdk.Duration.seconds(30)
+        });
+
+        // WebSocket Disconnect Handler
+        const webSocketDisconnectHandler = new lambda.Function(this, 'WebSocketDisconnectHandler', {
+            functionName: 'fraud-websocket-disconnect',
+            runtime: lambda.Runtime.PYTHON_3_13,
+            handler: 'disconnect_handler.lambda_handler',
+            code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/websocket')),
+            role: webSocketLambdaRole,
+            timeout: cdk.Duration.seconds(30)
+        });
+
+        // WebSocket Message Handler (kicks off async chat processing)
+        const webSocketMessageHandler = new lambda.Function(this, 'WebSocketMessageHandler', {
+            functionName: 'fraud-websocket-message',
+            runtime: lambda.Runtime.PYTHON_3_13,
+            handler: 'message_handler.lambda_handler',
+            code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/websocket')),
+            role: webSocketLambdaRole,
+            timeout: cdk.Duration.seconds(30)
+        });
+
+        // Streaming Chat Handler (modified version of existing chat handler for WebSocket streaming)
+        const streamingChatHandler = new lambda.Function(this, 'StreamingChatHandler', {
+            functionName: 'fraud-streaming-chat-handler',
+            runtime: lambda.Runtime.PYTHON_3_13,
+            handler: 'streaming_chat_handler.lambda_handler',
+            code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/websocket')),
+            role: webSocketLambdaRole,
+            environment: {
+                ENABLE_DEBUG: 'true',
+                BEDROCK_AGENT_ID: supervisorAgent.agentId,
+                BEDROCK_AGENT_ALIAS_ID: supervisorAgentAlias.aliasId
             },
-            deploy: false, // Don't deploy until all resources are created
-
+            timeout: cdk.Duration.minutes(15) // Longer timeout for streaming
         });
 
-        const auth = new apigateway.CognitoUserPoolsAuthorizer(this, 'ChatbotAuthorizer', {
-            cognitoUserPools: [this.userPool],
-            identitySource: 'method.request.header.Authorization',
-            resultsCacheTtl: cdk.Duration.seconds(0)
+        // WebSocket API
+        const webSocketApi = new apigatewayv2.WebSocketApi(this, 'ChatWebSocketApi', {
+            apiName: 'Fraud Detection Chat WebSocket API',
+            description: 'WebSocket API for streaming chat responses',
+            connectRouteOptions: {
+                integration: new apigatewayv2Integrations.WebSocketLambdaIntegration('ConnectIntegration', webSocketConnectHandler)
+            },
+            disconnectRouteOptions: {
+                integration: new apigatewayv2Integrations.WebSocketLambdaIntegration('DisconnectIntegration', webSocketDisconnectHandler)
+            },
+            defaultRouteOptions: {
+                integration: new apigatewayv2Integrations.WebSocketLambdaIntegration('MessageIntegration', webSocketMessageHandler)
+            }
         });
 
-        const apiResources = {
-            chat: this.api.root.addResource('chat'),
-            listFlow: this.api.root.addResource('list-flow-uri'),
-            listReports: this.api.root.addResource('list-report-uri'),
-            listS3: this.api.root.addResource('list-s3-uri')
-        };
-
-        apiResources.chat.addMethod('POST', new apigateway.LambdaIntegration(chatHandler), {
-            authorizer: auth,
-            authorizationType: apigateway.AuthorizationType.COGNITO,
-            authorizationScopes: ['email', 'openid', 'phone', 'profile']
+        // WebSocket Stage
+        const webSocketStage = new apigatewayv2.WebSocketStage(this, 'ChatWebSocketStage', {
+            webSocketApi,
+            stageName: 'prod',
+            autoDeploy: true
         });
 
-        apiResources.listFlow.addMethod('GET', new apigateway.LambdaIntegration(listFlowUriFunction), {
-            authorizer: auth,
-            authorizationType: apigateway.AuthorizationType.COGNITO,
-            authorizationScopes: ['email', 'openid', 'phone', 'profile']
+        // Update environment variables for WebSocket handlers
+        webSocketMessageHandler.addEnvironment('WEBSOCKET_API_ENDPOINT', `https://${webSocketApi.apiId}.execute-api.${this.region}.amazonaws.com/${webSocketStage.stageName}`);
+        webSocketMessageHandler.addEnvironment('STREAMING_CHAT_HANDLER_NAME', streamingChatHandler.functionName);
+
+        streamingChatHandler.addEnvironment('WEBSOCKET_API_ENDPOINT', `https://${webSocketApi.apiId}.execute-api.${this.region}.amazonaws.com/${webSocketStage.stageName}`);
+
+        // Grant permissions for WebSocket API to invoke Lambda functions
+        webSocketConnectHandler.addPermission('WebSocketApiInvokeConnect', {
+            principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+            sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${webSocketApi.apiId}/*/*`
         });
 
-        apiResources.listReports.addMethod('GET', new apigateway.LambdaIntegration(listReportsUriFunction), {
-            authorizer: auth,
-            authorizationType: apigateway.AuthorizationType.COGNITO,
-            authorizationScopes: ['email', 'openid', 'phone', 'profile']
+        webSocketDisconnectHandler.addPermission('WebSocketApiInvokeDisconnect', {
+            principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+            sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${webSocketApi.apiId}/*/*`
         });
 
-        apiResources.listS3.addMethod('GET', new apigateway.LambdaIntegration(listS3UriFunction), {
-            authorizer: auth,
-            authorizationType: apigateway.AuthorizationType.COGNITO,
-            authorizationScopes: ['email', 'openid', 'phone', 'profile']
+        webSocketMessageHandler.addPermission('WebSocketApiInvokeMessage', {
+            principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+            sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${webSocketApi.apiId}/*/*`
         });
-
-        const deployment = new apigateway.Deployment(this, 'ChatbotApiDeployment', {
-            api: this.api
-        });
-
-        const stage = new apigateway.Stage(this, 'prod', {
-            deployment
-        });
-
-        this.api.deploymentStage = stage;
 
 
         // Uncomment the following lines if you want to create a Kendra index and knowledge base
@@ -789,10 +830,6 @@ export class BackendStack extends cdk.Stack {
             description: 'Cognito User Pool Client ID'
         });
 
-        new CfnOutput(this, 'ApiUrl', {
-            value: this.api.url,
-            description: 'API Gateway URL'
-        });
 
         new CfnOutput(this, 'Region', {
             value: this.region,
@@ -802,6 +839,11 @@ export class BackendStack extends cdk.Stack {
         new CfnOutput(this, 'CognitoDomain', {
             value: `https://${domain.domainName}.auth.${this.region}.amazoncognito.com`,
             description: 'Cognito Domain URL'
+        });
+
+        new CfnOutput(this, 'WebSocketApiUrl', {
+            value: `wss://${webSocketApi.apiId}.execute-api.${this.region}.amazonaws.com/${webSocketStage.stageName}`,
+            description: 'WebSocket API URL'
         });
 
     }
