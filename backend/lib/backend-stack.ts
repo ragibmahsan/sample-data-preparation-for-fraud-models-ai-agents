@@ -662,6 +662,10 @@ export class BackendStack extends cdk.Stack {
             supportedIdentityProviders: [cognito.UserPoolClientIdentityProvider.COGNITO]
         });
 
+        // Explicitly enable OAuth flows using L1 construct to ensure proper configuration
+        const cfnUserPoolClient = this.userPoolClient.node.defaultChild as cognito.CfnUserPoolClient;
+        cfnUserPoolClient.allowedOAuthFlowsUserPoolClient = true;
+
         /*
         REST API Gateway Removed - Using WebSocket API Only
         List functions will be accessible through WebSocket API with special message types
