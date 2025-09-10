@@ -5,6 +5,7 @@ import { BackendStack } from '../lib/backend-stack';
 const app = new cdk.App();
 new BackendStack(app, 'BackendStack', {
     env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION }
+    // For more information about CDK environments, see the CDK Developer Guide
 });
 
 // new BedrockAgentStack(app, 'BedrockAgentStack', {

@@ -30,3 +30,13 @@ env/
 # AWS
 .aws/
 node_modules
+
+# Demo data files - exclude from open source release
+backend/demo_transactions/
+**/demo_transactions/
+**/*.csv
+**/*.tsv
+
+# CDK outputs
+cdk.out/
+*.zip
