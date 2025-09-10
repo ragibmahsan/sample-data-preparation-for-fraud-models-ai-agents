@@ -10,7 +10,15 @@ const cognitoAuthConfig = {
     redirect_uri: process.env.REACT_APP_REDIRECT_SIGNIN,
     post_logout_redirect_uri: process.env.REACT_APP_REDIRECT_SIGNOUT,
     response_type: "code",
-    scope: "email openid phone profile"
+    scope: "email openid phone profile",
+    metadata: {
+        issuer: `https://cognito-idp.${process.env.REACT_APP_AWS_REGION}.amazonaws.com/${process.env.REACT_APP_COGNITO_USER_POOL_ID}`,
+        authorization_endpoint: `https://${process.env.REACT_APP_COGNITO_DOMAIN}.auth.${process.env.REACT_APP_AWS_REGION}.amazoncognito.com/oauth2/authorize`,
+        token_endpoint: `https://${process.env.REACT_APP_COGNITO_DOMAIN}.auth.${process.env.REACT_APP_AWS_REGION}.amazoncognito.com/oauth2/token`,
+        userinfo_endpoint: `https://${process.env.REACT_APP_COGNITO_DOMAIN}.auth.${process.env.REACT_APP_AWS_REGION}.amazoncognito.com/oauth2/userInfo`,
+        end_session_endpoint: `https://${process.env.REACT_APP_COGNITO_DOMAIN}.auth.${process.env.REACT_APP_AWS_REGION}.amazoncognito.com/logout`,
+        jwks_uri: `https://cognito-idp.${process.env.REACT_APP_AWS_REGION}.amazonaws.com/${process.env.REACT_APP_COGNITO_USER_POOL_ID}/.well-known/jwks.json`
+    }
 };
 
 const root = ReactDOM.createRoot(

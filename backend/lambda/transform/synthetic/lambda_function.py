@@ -5,7 +5,10 @@ import io
 import json
 from datetime import datetime, timedelta
 from faker import Faker
-import random
+import secrets
+
+# Note: Using secrets module for cryptographically secure random generation
+# This addresses security scan findings about standard pseudo-random generators
 
 def lambda_handler(event, context):
     try:
@@ -72,7 +75,7 @@ def generate_synthetic_transactions(num_records, fraud_ratio):
     # Generate timestamps first
     base_timestamp = datetime.now()
     timestamps = [
-        (base_timestamp - timedelta(days=random.randint(0, 365))).strftime("%Y-%m-%dT%H:%M:%SZ")
+        (base_timestamp - timedelta(days=secrets.randbelow(365))).strftime("%Y-%m-%dT%H:%M:%SZ")
         for _ in range(num_records)
     ]
     
@@ -104,9 +107,9 @@ def generate_synthetic_transactions(num_records, fraud_ratio):
         'customer_email': [fake.email() for _ in range(num_records)],
         'billing_phone': [fake.phone_number() for _ in range(num_records)],
         'user_agent': [fake.user_agent() for _ in range(num_records)],
-        'product_category': [random.choice(product_categories) for _ in range(num_records)],
-        'order_price': [round(random.uniform(1, 1000), 2) for _ in range(num_records)],
-        'payment_currency': [random.choice(currencies) for _ in range(num_records)],
+        'product_category': [secrets.choice(product_categories) for _ in range(num_records)],
+        'order_price': [round(secrets.randbelow(1000) + 1 + secrets.randbelow(100)/100, 2) for _ in range(num_records)],
+        'payment_currency': [secrets.choice(currencies) for _ in range(num_records)],
         'merchant': [f"fraud_{fake.company()}" for _ in range(num_records)]
     }
     

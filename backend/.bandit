@@ -1,0 +1,6 @@
+[bandit]
+# Suppress B311 for Faker library usage - these are for synthetic data generation, not cryptographic purposes
+skips = B311
+
+# Only skip B311 in specific files where Faker is used for synthetic data
+exclude_dirs = node_modules,test,tests

@@ -89,7 +89,8 @@ def handle_list_operation(connection_id, operation_type):
                     error_body = json.loads(payload['body']) if isinstance(
                         payload['body'], str) else payload['body']
                     error_msg = error_body.get('message', error_msg)
-                except:
+                except (json.JSONDecodeError, KeyError, TypeError):
+                    # Unable to parse error body, use default error message
                     pass
 
             response_message = {
