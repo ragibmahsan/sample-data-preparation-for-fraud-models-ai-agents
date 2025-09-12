@@ -130,5 +130,5 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Authors
 
-- [Ragib Ahsan](https://www.linkedin.com/in/ragibmahsan/), AWS Partner Solutions Architect
+- [Ragib Ahsan](https://www.linkedin.com/in/ragibmahsan/), AWS AI Acceleration Architect
 - [Keith Lee](https://www.linkedin.com/in/keith-kit-lee/), AWS Partner Solutions Architect
