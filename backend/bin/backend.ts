@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import * as cdk from 'aws-cdk-lib';
+import { AwsSolutionsChecks } from 'cdk-nag';
 import { BackendStack } from '../lib/backend-stack';
 
 const app = new cdk.App();
@@ -7,6 +8,9 @@ new BackendStack(app, 'BackendStack', {
     env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION }
     // For more information about CDK environments, see the CDK Developer Guide
 });
+
+// Add cdk-nag security checks
+cdk.Aspects.of(app).add(new AwsSolutionsChecks({ verbose: true }));
 
 // new BedrockAgentStack(app, 'BedrockAgentStack', {
 //   env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: 'us-east-1' } // Bedrock agents are only available in specific regions
