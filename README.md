@@ -132,3 +132,11 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 - [Ragib Ahsan](https://www.linkedin.com/in/ragibmahsan/), AWS AI Acceleration Architect
 - [Keith Lee](https://www.linkedin.com/in/keith-kit-lee/), AWS Partner Solutions Architect
+
+## Security
+
+See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
+
+## License
+
+This library is licensed under the MIT-0 License. See the [LICENSE](LICENSE) file.
