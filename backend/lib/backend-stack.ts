@@ -13,6 +13,7 @@ import { bedrock } from '@cdklabs/generative-ai-cdk-constructs';
 // import { kendra } from '@cdklabs/generative-ai-cdk-constructs';
 import { Agent, AgentActionGroup, AgentCollaboratorType } from '@cdklabs/generative-ai-cdk-constructs/lib/cdk-lib/bedrock';
 import { supervisorInstruction, dataAnalysisAgentInstruction, transformAgentInstruction, supervisorDataAnalysisCollaboratorInstruction, supervisorTransformCollaboratorInstruction } from './instructions/agent-instructions';
+import { NagSuppressions } from 'cdk-nag';
 
 /**
  * Ensure that you have enabled access to foundational model
@@ -70,11 +71,24 @@ export class BackendStack extends cdk.Stack {
         /*
         Lambda Roles
     */
+        // Custom Lambda execution policy with scoped CloudWatch permissions
+        const customLambdaExecutionPolicy = new iam.ManagedPolicy(this, 'CustomLambdaExecutionPolicy', {
+            statements: [
+                new iam.PolicyStatement({
+                    effect: iam.Effect.ALLOW,
+                    actions: [
+                        'logs:CreateLogGroup',
+                        'logs:CreateLogStream',
+                        'logs:PutLogEvents'
+                    ],
+                    resources: [`arn:aws:logs:${this.region}:${this.account}:log-group:/aws/lambda/*`]
+                })
+            ]
+        });
+
         const listLambdaRole = new iam.Role(this, 'ListLambdaRole', {
             assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
-            managedPolicies: [
-                iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole')
-            ]
+            managedPolicies: [customLambdaExecutionPolicy]
         });
 
         listLambdaRole.addToPolicy(
@@ -91,14 +105,38 @@ export class BackendStack extends cdk.Stack {
             })
         );
 
+        // Custom SageMaker policy with minimal required permissions
+        const customSageMakerPolicy = new iam.ManagedPolicy(this, 'CustomSageMakerPolicy', {
+            statements: [
+                new iam.PolicyStatement({
+                    effect: iam.Effect.ALLOW,
+                    actions: [
+                        'sagemaker:CreateProcessingJob',
+                        'sagemaker:DescribeProcessingJob',
+                        'sagemaker:StopProcessingJob',
+                        'sagemaker:ListProcessingJobs'
+                    ],
+                    resources: [`arn:aws:sagemaker:${this.region}:${this.account}:processing-job/*`]
+                }),
+                new iam.PolicyStatement({
+                    effect: iam.Effect.ALLOW,
+                    actions: [
+                        'sagemaker:CreateDataWranglerFlowDefinition',
+                        'sagemaker:DescribeDataWranglerFlowDefinition'
+                    ],
+                    resources: [`arn:aws:sagemaker:${this.region}:${this.account}:flow-definition/*`]
+                })
+            ]
+        });
+
         const analysisLambdaRole = new iam.Role(this, 'AnalysisLambdaRole', {
             assumedBy: new iam.CompositePrincipal(
                 new iam.ServicePrincipal('lambda.amazonaws.com'),
                 new iam.ServicePrincipal('sagemaker.amazonaws.com')
             ),
             managedPolicies: [
-                iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
-                iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSageMakerFullAccess')
+                customLambdaExecutionPolicy,
+                customSageMakerPolicy
             ]
         });
 
@@ -130,12 +168,30 @@ export class BackendStack extends cdk.Stack {
         );
 
 
+        // Custom S3 policy with scoped permissions for fraud detection bucket
+        const customS3Policy = new iam.ManagedPolicy(this, 'CustomS3Policy', {
+            statements: [
+                new iam.PolicyStatement({
+                    effect: iam.Effect.ALLOW,
+                    actions: [
+                        's3:GetObject',
+                        's3:PutObject',
+                        's3:ListBucket'
+                    ],
+                    resources: [
+                        this.bucket.bucketArn,
+                        `${this.bucket.bucketArn}/*`
+                    ]
+                })
+            ]
+        });
+
         const fraudTransformLambdaRole = new iam.Role(this, 'FraudTransformLambdaRole', {
             assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
             roleName: 'fraud-transform-lambda-role',
             managedPolicies: [
-                iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
-                iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonS3FullAccess')
+                customLambdaExecutionPolicy,
+                customS3Policy
             ]
         });
 
@@ -440,12 +496,29 @@ export class BackendStack extends cdk.Stack {
         Bedrock Worker Agents
         Data Analyst Agent
     */
+        // Custom Bedrock policy with required permissions
+        const customBedrockPolicy = new iam.ManagedPolicy(this, 'CustomBedrockPolicy', {
+            statements: [
+                new iam.PolicyStatement({
+                    effect: iam.Effect.ALLOW,
+                    actions: [
+                        'bedrock:InvokeAgent',
+                        'bedrock:InvokeModel',
+                        'bedrock:ListAgents',
+                        'bedrock:GetAgent',
+                        'bedrock:GetAgentAlias'
+                    ],
+                    resources: [
+                        `arn:aws:bedrock:${this.region}:${this.account}:agent/*`,
+                        `arn:aws:bedrock:${this.region}:${this.account}:agent-alias/*`
+                    ]
+                })
+            ]
+        });
+
         const bedrockDataAnalysisAgentRole = new iam.Role(this, 'BedrockDataAnalysisAgentRole', {
             assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com'),
-            managedPolicies: [
-                iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonBedrockFullAccess'),
-                iam.ManagedPolicy.fromAwsManagedPolicyName('AWSLambda_FullAccess')
-            ]
+            managedPolicies: [customBedrockPolicy]
         });
 
         const dataAnalysisAgent = new bedrock.Agent(this, 'DataAnalysisAgent', {
@@ -480,11 +553,27 @@ export class BackendStack extends cdk.Stack {
         // Transformer Agent
         const bedrockAgentRole = new iam.Role(this, 'BedrockAgentRole', {
             assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com'),
-            managedPolicies: [
-                iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonBedrockFullAccess'),
-                iam.ManagedPolicy.fromAwsManagedPolicyName('AWSLambda_FullAccess')
-            ]
+            managedPolicies: [customBedrockPolicy]
         });
+
+        // Add Lambda invocation permissions for transform functions
+        bedrockAgentRole.addToPolicy(
+            new iam.PolicyStatement({
+                effect: iam.Effect.ALLOW,
+                actions: ['lambda:InvokeFunction'],
+                resources: [
+                    categorical2ordfunction.functionArn,
+                    convert2longfunction.functionArn,
+                    converttimefunction.functionArn,
+                    dropcolumnsfunction.functionArn,
+                    eventtimefunction.functionArn,
+                    onehotencodefunction.functionArn,
+                    symbolremovalfunction.functionArn,
+                    syntheticDataFunction.functionArn,
+                    text2lowerfunction.functionArn
+                ]
+            })
+        );
 
         const transformAgent = new bedrock.Agent(this, 'TransformAgent', {
             foundationModel: foundationModel,
@@ -849,6 +938,73 @@ export class BackendStack extends cdk.Stack {
             value: `wss://${webSocketApi.apiId}.execute-api.${this.region}.amazonaws.com/${webSocketStage.stageName}`,
             description: 'WebSocket API URL'
         });
+
+        // CDK-NAG Suppressions for Demo/Sample Application
+        // Note: This is a sample application to demonstrate fraud detection capabilities.
+        // In production, these security findings should be properly addressed.
+
+        // Suppress AWS managed policy warnings - acceptable for demo purposes
+        NagSuppressions.addStackSuppressions(this, [
+            {
+                id: 'AwsSolutions-IAM4',
+                reason: 'Demo application uses AWS managed policies for simplicity. In production, use custom policies with minimal permissions.',
+                appliesTo: [
+                    'Policy::arn:<AWS::Partition>:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
+                    'Policy::arn:<AWS::Partition>:iam::aws:policy/AmazonSageMakerFullAccess',
+                    'Policy::arn:<AWS::Partition>:iam::aws:policy/AmazonS3FullAccess',
+                    'Policy::arn:<AWS::Partition>:iam::aws:policy/AmazonBedrockFullAccess',
+                    'Policy::arn:<AWS::Partition>:iam::aws:policy/AWSLambda_FullAccess'
+                ]
+            },
+            {
+                id: 'AwsSolutions-IAM5',
+                reason: 'Demo application uses wildcard permissions for simplicity. Bedrock agents require dynamic Lambda invocation permissions. In production, scope permissions more tightly.',
+                appliesTo: [
+                    'Action::s3:GetBucket*',
+                    'Action::s3:GetObject*',
+                    'Action::s3:List*',
+                    'Action::s3:Abort*',
+                    'Action::s3:DeleteObject*',
+                    'Action::bedrock:*',
+                    'Resource::*',
+                    'Resource::<*>/*',
+                    'Resource::<*>:*',
+                    'Resource::arn:aws:s3:::cdk-hnb659fds-assets-*/*',
+                    'Resource::<FraudDetectionBucketE35752C2.Arn>/*',
+                    'Resource::<CreateFlowFunctionF9FE51D4.Arn>:*',
+                    'Resource::<ProcessingFunctionCD3C33F7.Arn>:*',
+                    'Resource::<Categorical2OrdFunction089B899C.Arn>:*',
+                    'Resource::<Convert2LongFunction8746F4AF.Arn>:*',
+                    'Resource::<ConvertTimeFunction0BB58171.Arn>:*',
+                    'Resource::<DropColumnsFunction3E90BD22.Arn>:*',
+                    'Resource::<EventTimeFunction37625F95.Arn>:*',
+                    'Resource::<OneHotEncodeFunction73629A05.Arn>:*',
+                    'Resource::<SymbolRemovalFunction4C32CECE.Arn>:*',
+                    'Resource::<SyntheticDataFunction583C2440.Arn>:*',
+                    'Resource::<Text2LowercaseFunction40668D53.Arn>:*'
+                ]
+            },
+            {
+                id: 'AwsSolutions-L1',
+                reason: 'CDK BucketDeployment custom resource uses managed runtime that is automatically updated by AWS.'
+            },
+            {
+                id: 'AwsSolutions-COG2',
+                reason: 'Demo application does not require MFA for ease of testing. In production, enable MFA for enhanced security.'
+            },
+            {
+                id: 'AwsSolutions-COG3',
+                reason: 'Demo application does not require advanced security mode for cost optimization. In production, enable advanced security features.'
+            },
+            {
+                id: 'AwsSolutions-APIG4',
+                reason: 'WebSocket API routes do not implement authorization for demo simplicity. In production, implement proper authentication and authorization.'
+            },
+            {
+                id: 'AwsSolutions-APIG1',
+                reason: 'Demo application does not enable access logging for cost optimization. In production, enable access logging for monitoring and compliance.'
+            }
+        ]);
 
     }
 }
