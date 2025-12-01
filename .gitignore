@@ -25,7 +25,8 @@ env/
 
 # Local development settings
 .env
-.env.local
+.env.*
+!.env.example
 
 # AWS
 .aws/
