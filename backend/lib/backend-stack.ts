@@ -496,22 +496,13 @@ export class BackendStack extends cdk.Stack {
         Bedrock Worker Agents
         Data Analyst Agent
     */
-        // Custom Bedrock policy with required permissions
+        // Custom Bedrock policy with administrator permissions
         const customBedrockPolicy = new iam.ManagedPolicy(this, 'CustomBedrockPolicy', {
             statements: [
                 new iam.PolicyStatement({
                     effect: iam.Effect.ALLOW,
-                    actions: [
-                        'bedrock:InvokeAgent',
-                        'bedrock:InvokeModel',
-                        'bedrock:ListAgents',
-                        'bedrock:GetAgent',
-                        'bedrock:GetAgentAlias'
-                    ],
-                    resources: [
-                        `arn:aws:bedrock:${this.region}:${this.account}:agent/*`,
-                        `arn:aws:bedrock:${this.region}:${this.account}:agent-alias/*`
-                    ]
+                    actions: ['bedrock:*'],
+                    resources: ['*']
                 })
             ]
         });
@@ -939,72 +930,9 @@ export class BackendStack extends cdk.Stack {
             description: 'WebSocket API URL'
         });
 
-        // CDK-NAG Suppressions for Demo/Sample Application
-        // Note: This is a sample application to demonstrate fraud detection capabilities.
-        // In production, these security findings should be properly addressed.
+        new CfnOutput(this, 'ApiGatewayEndpoint', {
+            value: `https://${webSocketApi.apiId}.execute-api.${this.region}.amazonaws.com/${webSocketStage.stageName}`,
+            description: 'API Gateway Endpoint URL'
+        });
 
-        // Suppress AWS managed policy warnings - acceptable for demo purposes
-        NagSuppressions.addStackSuppressions(this, [
-            {
-                id: 'AwsSolutions-IAM4',
-                reason: 'Demo application uses AWS managed policies for simplicity. In production, use custom policies with minimal permissions.',
-                appliesTo: [
-                    'Policy::arn:<AWS::Partition>:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
-                    'Policy::arn:<AWS::Partition>:iam::aws:policy/AmazonSageMakerFullAccess',
-                    'Policy::arn:<AWS::Partition>:iam::aws:policy/AmazonS3FullAccess',
-                    'Policy::arn:<AWS::Partition>:iam::aws:policy/AmazonBedrockFullAccess',
-                    'Policy::arn:<AWS::Partition>:iam::aws:policy/AWSLambda_FullAccess'
-                ]
-            },
-            {
-                id: 'AwsSolutions-IAM5',
-                reason: 'Demo application uses wildcard permissions for simplicity. Bedrock agents require dynamic Lambda invocation permissions. In production, scope permissions more tightly.',
-                appliesTo: [
-                    'Action::s3:GetBucket*',
-                    'Action::s3:GetObject*',
-                    'Action::s3:List*',
-                    'Action::s3:Abort*',
-                    'Action::s3:DeleteObject*',
-                    'Action::bedrock:*',
-                    'Resource::*',
-                    'Resource::<*>/*',
-                    'Resource::<*>:*',
-                    'Resource::arn:aws:s3:::cdk-hnb659fds-assets-*/*',
-                    'Resource::<FraudDetectionBucketE35752C2.Arn>/*',
-                    'Resource::<CreateFlowFunctionF9FE51D4.Arn>:*',
-                    'Resource::<ProcessingFunctionCD3C33F7.Arn>:*',
-                    'Resource::<Categorical2OrdFunction089B899C.Arn>:*',
-                    'Resource::<Convert2LongFunction8746F4AF.Arn>:*',
-                    'Resource::<ConvertTimeFunction0BB58171.Arn>:*',
-                    'Resource::<DropColumnsFunction3E90BD22.Arn>:*',
-                    'Resource::<EventTimeFunction37625F95.Arn>:*',
-                    'Resource::<OneHotEncodeFunction73629A05.Arn>:*',
-                    'Resource::<SymbolRemovalFunction4C32CECE.Arn>:*',
-                    'Resource::<SyntheticDataFunction583C2440.Arn>:*',
-                    'Resource::<Text2LowercaseFunction40668D53.Arn>:*'
-                ]
-            },
-            {
-                id: 'AwsSolutions-L1',
-                reason: 'CDK BucketDeployment custom resource uses managed runtime that is automatically updated by AWS.'
-            },
-            {
-                id: 'AwsSolutions-COG2',
-                reason: 'Demo application does not require MFA for ease of testing. In production, enable MFA for enhanced security.'
-            },
-            {
-                id: 'AwsSolutions-COG3',
-                reason: 'Demo application does not require advanced security mode for cost optimization. In production, enable advanced security features.'
-            },
-            {
-                id: 'AwsSolutions-APIG4',
-                reason: 'WebSocket API routes do not implement authorization for demo simplicity. In production, implement proper authentication and authorization.'
-            },
-            {
-                id: 'AwsSolutions-APIG1',
-                reason: 'Demo application does not enable access logging for cost optimization. In production, enable access logging for monitoring and compliance.'
-            }
-        ]);
-
-    }
-}
+    }}

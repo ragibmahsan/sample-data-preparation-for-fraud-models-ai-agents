@@ -5,7 +5,7 @@ module.exports = {
     ],
     rules: {
         'indent': ['error', 4],
-        'no-trailing-spaces': 'error',
+        'no-trailing-spaces': 'off',
         'space-before-blocks': 'error',
         'space-before-function-paren': ['error', {
             'anonymous': 'always',

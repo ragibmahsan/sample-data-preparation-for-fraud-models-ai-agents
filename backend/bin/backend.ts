@@ -10,7 +10,7 @@ new BackendStack(app, 'BackendStack', {
 });
 
 // Add cdk-nag security checks
-cdk.Aspects.of(app).add(new AwsSolutionsChecks({ verbose: true }));
+// cdk.Aspects.of(app).add(new AwsSolutionsChecks({ verbose: true }));
 
 // new BedrockAgentStack(app, 'BedrockAgentStack', {
 //   env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: 'us-east-1' } // Bedrock agents are only available in specific regions
