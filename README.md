@@ -4,7 +4,7 @@ This solution provides an advanced financial fraud detection system that leverag
 
 <div align="center">
   
-https://github.com/user-attachments/assets/images/frauddemo.mp4
+![Demo Video](images/frauddemo.gif)
 
 *Demo: FSI Fraud Detection with Generative AI in action*
 
