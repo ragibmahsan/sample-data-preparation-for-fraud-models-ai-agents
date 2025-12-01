@@ -2,6 +2,14 @@
 
 This solution provides an advanced financial fraud detection system that leverages generative AI and AWS services. It focuses on preprocessing and transforming financial transaction data to enhance fraud detection capabilities. The system utilizes a series of data transformation steps, implemented as AWS Lambda functions, and orchestrated through an Amazon Bedrock agent.
 
+<div align="center">
+  
+https://github.com/user-attachments/assets/images/frauddemo.mp4
+
+*Demo: FSI Fraud Detection with Generative AI in action*
+
+</div>
+
 ## Key Features
 
 - Data preprocessing pipeline for fraud detection datasets
